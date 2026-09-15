@@ -25,7 +25,12 @@ from app.resample import prepare_for_vad
 from app.speaker import SpeakerTracker
 from app.vad_segmenter import VadSegmenter
 
-DEFAULT_SECONDS = 25.0
+DEFAULT_SECONDS = 180.0     # cho toi da 3 phut
+TARGET_UTTERANCES = 8       # du 8 cau thi dung som, khong cho het gio
+
+# Vi sao cho lau: nguoi dung thuc te KHONG noi lien tuc (choi game, hop...),
+# co the im lang ca phut roi moi noi mot cau. Dem gio co dinh 25s thi thuong
+# ket thuc voi 0 cau va khong chan doan duoc gi.
 
 
 def main() -> None:
@@ -67,7 +72,9 @@ def main() -> None:
     print(f"ECAPA nhan dien nguoi noi: {'CO' if tracker.using_ecapa else 'KHONG'}\n")
 
     print("=" * 72)
-    print(f"  THU {seconds:.0f} GIAY - HAY DE VIDEO CHAY")
+    print(f"  DANG THU - dung khi du {TARGET_UTTERANCES} cau hoac het {seconds:.0f}s")
+    print("  Cu noi chuyen binh thuong, KHONG can noi lien tuc.")
+    print("  (doi thoi gian cho: python main.py --diagnose 300 --auto)")
     print("=" * 72 + "\n")
 
     capture = LoopbackCapture(device=source)
@@ -78,10 +85,18 @@ def main() -> None:
     pending = b""
     utterances = []
     peak_level = 0.0
-    t_end = time.time() + seconds
+    t_start = time.time()
+    t_end = t_start + seconds
+    last_tick = 0.0
 
     try:
-        while time.time() < t_end:
+        while time.time() < t_end and len(utterances) < TARGET_UTTERANCES:
+            # Bao hieu van dang chay, de khong tuong bi treo trong luc im lang
+            elapsed = time.time() - t_start
+            if elapsed - last_tick >= 10.0:
+                last_tick = elapsed
+                print(f"  ... dang cho ({elapsed:.0f}s, {len(utterances)} cau, "
+                      f"con {t_end - time.time():.0f}s)")
             try:
                 chunk = capture.out_queue.get(timeout=0.5)
             except Exception:

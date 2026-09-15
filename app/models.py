@@ -31,12 +31,22 @@ class ModelHub:
         """Load (neu chua co) model MT + TTS cho 1 chieu, roi tra ve."""
         if direction.key not in self._translators:
             self._status(f"Dang tai model dich {direction.label}...")
-            self._translators[direction.key] = Translator(
-                src_lang=direction.stt_language,
-                tgt_lang=direction.tgt_language,
-                backend=direction.mt_backend,
-                model_name=direction.mt_model,
-            )
+            if direction.stt_language == "auto":
+                # Che do tu nhan dien khong co ngon ngu NGUON co dinh, nen khong
+                # dung san translator theo DirectionConfig duoc ("auto" khong phai
+                # ma ngon ngu hop le). Dung cap pho bien nhat lam mac dinh; moi
+                # cau sau do se tu lay translator dung theo ngon ngu doan duoc.
+                src = "en" if direction.tgt_language == "vi" else "vi"
+                self._translators[direction.key] = self.ensure_translator(
+                    src, direction.tgt_language
+                )
+            else:
+                self._translators[direction.key] = Translator(
+                    src_lang=direction.stt_language,
+                    tgt_lang=direction.tgt_language,
+                    backend=direction.mt_backend,
+                    model_name=direction.mt_model,
+                )
 
         if direction.key not in self._tts:
             self._status(f"Dang tai giong doc {direction.label}...")
@@ -60,8 +70,11 @@ class ModelHub:
         self._status(f"Dang lam nong {direction.label}...")
         try:
             silence = np.zeros(self.cfg.audio.target_sample_rate // 2, dtype=np.int16).tobytes()
-            stt.transcribe_pcm16(silence, direction.stt_language, self.cfg.audio.target_sample_rate)
-            warm_text = "xin chào" if direction.stt_language == "vi" else "hello"
+            warm_lang = direction.stt_language
+            if warm_lang == "auto":
+                warm_lang = "en" if direction.tgt_language == "vi" else "vi"
+            stt.transcribe_pcm16(silence, warm_lang, self.cfg.audio.target_sample_rate)
+            warm_text = "xin chào" if warm_lang == "vi" else "hello"
             tts.synthesize(translator.translate(warm_text))
         except Exception:
             pass  # warm-up that bai khong phai loi nghiem trong, van chay duoc
