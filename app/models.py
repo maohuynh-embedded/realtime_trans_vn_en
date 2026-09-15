@@ -4,6 +4,8 @@ Whisper duoc load DUY NHAT 1 lan (ngon ngu truyen vao tung lan goi), con MT va
 TTS thi moi chieu mot bo. Nho vay bat them chieu thu hai chi ton them ~400MB
 thay vi gap doi toan bo.
 """
+from pathlib import Path
+
 from app.config import AppConfig, DirectionConfig
 from app.mt import Translator
 from app.stt import SpeechToText
@@ -28,33 +30,39 @@ class ModelHub:
         return self.stt
 
     def ensure_direction(self, direction: DirectionConfig) -> tuple[Translator, TextToSpeech]:
-        """Load (neu chua co) model MT + TTS cho 1 chieu, roi tra ve."""
-        if direction.key not in self._translators:
-            self._status(f"Dang tai model dich {direction.label}...")
-            if direction.stt_language == "auto":
-                # Che do tu nhan dien khong co ngon ngu NGUON co dinh, nen khong
-                # dung san translator theo DirectionConfig duoc ("auto" khong phai
-                # ma ngon ngu hop le). Dung cap pho bien nhat lam mac dinh; moi
-                # cau sau do se tu lay translator dung theo ngon ngu doan duoc.
-                src = "en" if direction.tgt_language == "vi" else "vi"
-                self._translators[direction.key] = self.ensure_translator(
-                    src, direction.tgt_language
-                )
-            else:
-                self._translators[direction.key] = Translator(
-                    src_lang=direction.stt_language,
-                    tgt_lang=direction.tgt_language,
-                    backend=direction.mt_backend,
-                    model_name=direction.mt_model,
-                )
+        """Load (neu chua co) model MT + TTS cho 1 chieu, roi tra ve.
 
-        if direction.key not in self._tts:
-            self._status(f"Dang tai giong doc {direction.label}...")
-            self._tts[direction.key] = TextToSpeech(
+        Cache danh dau theo CAP NGON NGU va TEP GIONG, khong phai theo
+        direction.key. Ly do: ca ba che do nghe (Anh->Viet, Viet->Anh, tu nhan
+        dien) deu dung chung key "en2vi", nen neu danh dau theo key thi doi che
+        do se lay nham model cua che do truoc - dich sai ngon ngu va doc sai
+        giong, ma khong bao loi gi.
+        """
+        tgt = direction.tgt_language
+        src = direction.stt_language
+        if src == "auto":
+            # Che do tu nhan dien: dung cap pho bien nhat lam mac dinh, moi cau
+            # se tu lay translator dung theo ngon ngu doan duoc.
+            src = "en" if tgt == "vi" else "vi"
+
+        translator = self.ensure_translator(src, tgt)
+
+        tts_key = direction.tts_onnx
+        if tts_key not in self._tts:
+            self._status(f"Dang tai giong doc {Path(tts_key).stem}...")
+            self._tts[tts_key] = TextToSpeech(
                 direction.tts_onnx, direction.tts_json, direction.tts_length_scale
             )
 
-        return self._translators[direction.key], self._tts[direction.key]
+        return translator, self._tts[tts_key]
+
+    def reset_stt(self) -> None:
+        """Bo model Whisper dang giu (de load lai voi co khac).
+
+        Chi bo Whisper, GIU nguyen cac model dich va giong doc - chung khong lien
+        quan gi den co Whisper nen khong co ly do tai lai.
+        """
+        self.stt = None
 
     def warm_up(self, direction: DirectionConfig) -> None:
         """Chay thu 1 lan qua ca 3 model cua 1 chieu.

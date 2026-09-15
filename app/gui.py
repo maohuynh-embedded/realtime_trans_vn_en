@@ -101,6 +101,12 @@ class DirectionPanel(ttk.LabelFrame):
         self.pause_btn = ttk.Button(ctrl, text="Tam dung", command=self._on_pause, state="disabled")
         self.pause_btn.pack(side=tk.LEFT, padx=6)
 
+        self.auto_dev_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            ctrl, text="Tu dong chon thiet bi", variable=self.auto_dev_var,
+            command=self._on_auto_dev_toggle,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+
         self.speak_var = tk.BooleanVar(value=direction.speak)
         ttk.Checkbutton(
             ctrl, text="Doc thanh tieng", variable=self.speak_var, command=self._on_speak_toggle
@@ -241,9 +247,14 @@ class DirectionPanel(ttk.LabelFrame):
             self.lag_var.set("")
             return
 
+        if self.auto_dev_var.get():
+            self.status_var.set("Dang do thiet bi dang co am thanh...")
+            self.update_idletasks()
+            self._auto_pick_devices()
+
         source, output = self.selected_source(), self.selected_output()
         if source is None or output is None:
-            self.status_var.set("Chua chon du thiet bi.")
+            self.status_var.set("Khong tim thay thiet bi am thanh nao dung duoc.")
             return
 
         self.direction.speak = self.speak_var.get()
@@ -272,6 +283,51 @@ class DirectionPanel(ttk.LabelFrame):
         if self.pipeline is not None and self.pipeline.is_running():
             self.toggle_btn.config(text="Tat")
             self.pause_btn.config(state="normal")
+
+    def _on_auto_dev_toggle(self) -> None:
+        """Tu dong = app tu chon thiet bi. Bo tich = nguoi dung tu chon."""
+        self._update_combo_state()
+        if self.auto_dev_var.get():
+            self.status_var.set("App se tu chon thiet bi khi bam Bat.")
+        else:
+            self.status_var.set("Ban tu chon thiet bi o 2 o tren.")
+
+    def _update_combo_state(self) -> None:
+        """Khoa o chon khi dang o che do tu dong, hoac khi chi co 1 lua chon.
+
+        Khong co gi de chon thi khong nen bat nguoi dung phai chon - do la nguon
+        goc cua phan lon loi cau hinh sai.
+        """
+        auto = self.auto_dev_var.get()
+        for combo, mapping in ((self.source_combo, getattr(self, "source_map", {})),
+                               (self.output_combo, getattr(self, "output_map", {}))):
+            only_one = len(mapping) <= 1
+            combo.config(state="disabled" if (auto or only_one) else "readonly")
+
+    def _auto_pick_devices(self) -> None:
+        """Chon thiet bi tu dong: uu tien thiet bi DANG THUC SU co am thanh."""
+        if self.source_kind == "loopback":
+            try:
+                from app.levels import find_active_loopback
+                found = find_active_loopback(probe_s=2.0)
+                if found is not None:
+                    key = f"[{found.index}] {found.name}"
+                    if key in self.source_map:
+                        self.source_combo.set(key)
+            except Exception:
+                pass    # khong do duoc thi giu nguyen lua chon mac dinh
+
+            src = self.selected_source()
+            if src is not None:
+                try:
+                    out = suggest_output_device(src)
+                    key = f"[{out.index}] {out.name}"
+                    if key in self.output_map:
+                        self.output_combo.set(key)
+                except Exception:
+                    pass
+        else:
+            self._select_output_for_virtual_mic()
 
     def _on_lang_change(self, _evt=None) -> None:
         """Doi cap ngon ngu cho khung nghe. Phai TAT roi BAT lai de ap dung."""
@@ -463,8 +519,9 @@ class App(tk.Tk):
         if new_size == self.cfg.stt.model_size:
             return
         self.cfg.stt.model_size = new_size
-        # Phai tao ModelHub moi de load lai Whisper
-        self.hub = ModelHub(self.cfg, status_cb=lambda m: self.status_queue.put(m))
+        # Chi bo Whisper de load lai; cac model dich va giong doc khong lien quan
+        # den co Whisper nen giu nguyen, khong tai lai cho phi thoi gian.
+        self.hub.reset_stt()
         running = [p for p in self.panels.values() if p.pipeline is not None]
         if running:
             self.global_status.set(f"Da doi model sang '{new_size}' - TAT roi BAT lai de ap dung.")
@@ -495,6 +552,7 @@ class App(tk.Tk):
         outputs = list_output_devices()
         for panel in self.panels.values():
             panel.refresh_devices(loopbacks, inputs, outputs)
+            panel._update_combo_state()
         self.check_warnings()
 
     def check_warnings(self) -> None:

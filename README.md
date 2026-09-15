@@ -70,6 +70,32 @@ tiếng Việt và đối tác nghe được tiếng Anh.
 
 ## Cài đặt
 
+### Cách 1 — Người dùng cuối (khuyến nghị)
+
+Tải mã nguồn về, rồi **nhấp đúp vào `CHAY_APP.bat`**.
+
+Lần đầu chạy, nó tự tạo môi trường, cài thư viện, dò phần cứng và tải giọng đọc —
+mất vài phút và chỉ làm một lần. Các lần sau mở thẳng giao diện.
+
+Yêu cầu duy nhất: máy đã cài **Python 3.10–3.12**. Nếu chưa có, script sẽ báo và
+chỉ chỗ tải. Lúc cài Python nhớ tích ô **"Add Python to PATH"**.
+
+Người dùng không cần chạm tới dòng lệnh, cũng không cần chọn thiết bị âm thanh —
+app mặc định **tự dò thiết bị đang phát tiếng**. Chỉ khi máy có nhiều tai nghe và
+muốn đổi thì mới bỏ tích *"Tự động chọn thiết bị"* để chọn tay.
+
+### Cách 2 — Lập trình viên
+
+```bash
+python setup_env.py
+```
+
+Làm cùng các bước trên nhưng hiện chi tiết, kèm tự kiểm tra ở cuối. Tuỳ chọn:
+`--full` tải sẵn toàn bộ mô hình để sau đó chạy offline hoàn toàn, `--cpu` ép
+dùng bản CPU, `--skip-test` bỏ bước kiểm tra.
+
+### Cách 3 — Thủ công
+
 ```bash
 git clone git@github.com:maohuynh-embedded/realtime_trans_vn_en.git
 ```
