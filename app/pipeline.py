@@ -83,6 +83,10 @@ class DirectionPipeline:
         self.drop_when_behind: bool = True
         self.max_lag_s: float = 6.0
 
+        # Dem so cau bi bo loc ao giac loai bo, de hien len GUI
+        self.rejected_count = 0
+        self.last_reject_reason = ""
+
         # Nhan dien nguoi noi + gioi tinh (chi co y nghia voi nguon loopback,
         # vi nguon mic thi luon la chinh ban).
         self.identify_speakers: bool = direction.source == "loopback"
@@ -227,12 +231,23 @@ class DirectionPipeline:
 
         self._set_status("Dang nhan dang (STT)...")
         t0 = time.monotonic()
+
+        # Bo loc ao giac co the loai bo cau. Phai BAO RO ly do, neu khong nguoi
+        # dung chi thay app im lang ma khong biet tai sao (da gap dung loi nay).
+        reasons: list[str] = []
         source_text = stt.transcribe_pcm16(
-            utt.pcm16_bytes, self.direction.stt_language, self.audio_cfg.target_sample_rate
+            utt.pcm16_bytes,
+            self.direction.stt_language,
+            self.audio_cfg.target_sample_rate,
+            reject_cb=reasons.append,
         )
         t_stt = time.monotonic() - t0
+
         if not source_text.strip():
-            self._set_status("Dang nghe...")
+            self.rejected_count += 1
+            reason = reasons[0] if reasons else "khong nghe ra gi"
+            self.last_reject_reason = reason
+            self._set_status(f"Bo qua ({self.rejected_count}): {reason}")
             return
 
         self._set_status("Dang dich...")

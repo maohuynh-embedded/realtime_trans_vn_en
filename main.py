@@ -4,6 +4,7 @@
   python main.py --watch --speak     -> nhu tren nhung doc to ban dich
   python main.py --levels            -> xem am thanh dang phat ra thiet bi nao
   python main.py --diagnose          -> soi tung buoc de tim cho dich sai
+  Them --vi vao --watch/--diagnose   -> nguon la TIENG VIET (dich sang Anh)
   python main.py                     -> mo GUI (ca 2 chieu)
   python main.py --console           -> console, chieu Anh->Viet (nghe doi tac)
   python main.py --console --vi2en   -> console, chieu Viet->Anh (doi tac nghe ban)

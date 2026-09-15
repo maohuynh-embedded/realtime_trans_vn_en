@@ -104,6 +104,35 @@ def vi_to_en_direction() -> DirectionConfig:
     )
 
 
+def listen_vi_to_en_direction() -> DirectionConfig:
+    """Nghe am thanh may phat ra la TIENG VIET -> dich sang tieng Anh.
+
+    Khac vi_to_en_direction() o cho NGUON la loopback chu khong phai mic: dung khi
+    nguoi khac noi tieng Viet qua Discord/Zoom va ban muon ban dich tieng Anh.
+
+    Ly do can cai nay: tai lieu goc gia dinh nguon LUON la tieng Anh nen co dinh
+    language="en". Neu nguon thuc te la tieng Viet, Whisper bi ep phien am tieng
+    Viet thanh tieng Anh -> ra rac -> bo loc ao giac loai sach -> app im lang
+    hoan toan ma khong bao gi. Da gap dung loi nay.
+    """
+    return DirectionConfig(
+        key="en2vi",          # giu key de GUI khong phai doi khung
+        label="Viet -> Anh (nghe am thanh may)",
+        source="loopback",
+        stt_language="vi",
+        tgt_language="en",
+        tts_onnx="models/piper/en_US-lessac-medium.onnx",
+        tts_json="models/piper/en_US-lessac-medium.onnx.json",
+    )
+
+
+# Cac cap ngon ngu chon duoc cho khung "nghe am thanh may"
+LISTEN_DIRECTIONS = {
+    "en2vi": ("Nghe tieng ANH  ->  dich sang Viet", en_to_vi_direction),
+    "vi2en": ("Nghe tieng VIET ->  dich sang Anh", listen_vi_to_en_direction),
+}
+
+
 @dataclass
 class AppConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)

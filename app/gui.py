@@ -25,7 +25,7 @@ from app.audio_devices import (
     list_output_devices,
     suggest_output_device,
 )
-from app.config import default_config
+from app.config import LISTEN_DIRECTIONS, default_config
 from app.models import ModelHub
 from app.pipeline import DirectionPipeline
 
@@ -74,6 +74,26 @@ class DirectionPanel(ttk.LabelFrame):
         self.output_combo.grid(row=0, column=4, padx=4)
         self.output_combo.bind("<<ComboboxSelected>>", lambda _e: self.app.check_warnings())
 
+        if source_kind == "loopback":
+            # Ngon ngu NGUON phai khop voi thu tieng thuc su dang phat ra.
+            # Chon sai (vd. nguon tieng Viet ma de "nghe tieng Anh") thi Whisper
+            # bi ep phien am sai ngon ngu -> ra rac -> bo loc loai sach -> IM LANG.
+            lang_row = ttk.Frame(self)
+            lang_row.pack(fill=tk.X, pady=(4, 0))
+            ttk.Label(lang_row, text="Ngon ngu dang nghe:").pack(side=tk.LEFT)
+            self.lang_combo = ttk.Combobox(
+                lang_row, state="readonly", width=34,
+                values=[lbl for lbl, _ in LISTEN_DIRECTIONS.values()],
+            )
+            self.lang_combo.current(0)
+            self.lang_combo.pack(side=tk.LEFT, padx=6)
+            self.lang_combo.bind("<<ComboboxSelected>>", self._on_lang_change)
+            ttk.Label(
+                lang_row,
+                text="<- chon dung thu tieng dang phat, sai thi khong ra ket qua nao",
+                foreground="#888",
+            ).pack(side=tk.LEFT, padx=6)
+
         ctrl = ttk.Frame(self)
         ctrl.pack(fill=tk.X, pady=(4, 2))
         self.toggle_btn = ttk.Button(ctrl, text="Bat", width=10, command=self._on_toggle)
@@ -100,8 +120,10 @@ class DirectionPanel(ttk.LabelFrame):
 
         src_title = "Tieng Anh nghe duoc" if direction.key == "en2vi" else "Tieng Viet ban noi"
         dst_title = "Ban dich tieng Viet" if direction.key == "en2vi" else "Ban dich tieng Anh"
-        ttk.Label(texts, text=src_title).grid(row=0, column=0, sticky="w")
-        ttk.Label(texts, text=dst_title).grid(row=0, column=1, sticky="w")
+        self.src_title_label = ttk.Label(texts, text=src_title)
+        self.src_title_label.grid(row=0, column=0, sticky="w")
+        self.dst_title_label = ttk.Label(texts, text=dst_title)
+        self.dst_title_label.grid(row=0, column=1, sticky="w")
 
         self.src_text = tk.Text(texts, wrap="word", height=7)
         self.src_text.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
@@ -250,6 +272,28 @@ class DirectionPanel(ttk.LabelFrame):
         if self.pipeline is not None and self.pipeline.is_running():
             self.toggle_btn.config(text="Tat")
             self.pause_btn.config(state="normal")
+
+    def _on_lang_change(self, _evt=None) -> None:
+        """Doi cap ngon ngu cho khung nghe. Phai TAT roi BAT lai de ap dung."""
+        keys = list(LISTEN_DIRECTIONS.keys())
+        idx = self.lang_combo.current()
+        _label, factory = LISTEN_DIRECTIONS[keys[idx]]
+
+        new_dir = factory()
+        new_dir.speak = self.speak_var.get()
+        self.direction = new_dir
+        self.config(text=new_dir.label)
+
+        # Doi tieu de 2 khung van ban cho khop ngon ngu moi
+        src_title = "Tieng Anh nghe duoc" if new_dir.stt_language == "en" else "Tieng Viet nghe duoc"
+        dst_title = "Ban dich tieng Viet" if new_dir.tgt_language == "vi" else "Ban dich tieng Anh"
+        self.src_title_label.config(text=src_title)
+        self.dst_title_label.config(text=dst_title)
+
+        if self.pipeline is not None and self.pipeline.is_running():
+            self.status_var.set("Da doi ngon ngu - TAT roi BAT lai de ap dung.")
+        else:
+            self.status_var.set(f"Se nghe tieng {'Anh' if new_dir.stt_language == 'en' else 'Viet'}.")
 
     def _on_speak_toggle(self) -> None:
         self.direction.speak = self.speak_var.get()

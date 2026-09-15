@@ -18,6 +18,7 @@ Bon lop loc, di tu re den dat:
   4. Danh sach den    - cac cau bia dac trung, chan thang.
 """
 import re
+import unicodedata
 
 import numpy as np
 
@@ -72,9 +73,20 @@ AVG_LOGPROB_MIN = -0.90   # duoi nguong nay -> dang doan mo
 RMS_MIN = 0.006           # duoi nguong nay -> gan nhu im lang
 
 
+def _strip_diacritics(text: str) -> str:
+    """Bo dau tieng Viet: 'cam on cac ban da xem' khop voi 'cam on cac ban da xem'.
+
+    Danh sach den viet khong dau, con Whisper tra ve co dau - neu khong bo dau
+    truoc khi so thi cac muc tieng Viet trong danh sach KHONG BAO GIO khop.
+    """
+    decomposed = unicodedata.normalize("NFD", text)
+    without_marks = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return without_marks.replace("đ", "d").replace("Đ", "D")
+
+
 def _normalize(text: str) -> str:
-    """Bo dau cau, dau cach thua, chuyen chu thuong - de so voi danh sach den."""
-    text = text.lower().strip()
+    """Bo dau cau, bo dau tieng Viet, chuyen chu thuong - de so voi danh sach den."""
+    text = _strip_diacritics(text.lower().strip())
     text = re.sub(r"[^\w\s]", "", text, flags=re.UNICODE)
     return re.sub(r"\s+", " ", text).strip()
 
@@ -150,12 +162,17 @@ def should_reject(
     if is_repetitive(text):
         return True, "lap cum tu"
 
-    # Whisper tu bao khong co tieng noi
-    if no_speech_prob == no_speech_prob and no_speech_prob > no_speech_max:
-        return True, f"no_speech_prob={no_speech_prob:.2f}"
+    # no_speech_prob cua Whisper KHONG dang tin khi dung mot minh: cau that van
+    # hay bi cham diem cao (da gap: mot cau tieng Viet ro rang bi cham 0.73 va
+    # loai nham). Chi loai khi CA HAI dau hieu cung xau.
+    bad_no_speech = no_speech_prob == no_speech_prob and no_speech_prob > no_speech_max
+    bad_logprob = avg_logprob == avg_logprob and avg_logprob < avg_logprob_min
 
-    # Do tu tin qua thap
-    if avg_logprob == avg_logprob and avg_logprob < avg_logprob_min:
-        return True, f"avg_logprob={avg_logprob:.2f}"
+    if bad_no_speech and bad_logprob:
+        return True, f"no_speech={no_speech_prob:.2f} va logprob={avg_logprob:.2f}"
+
+    # Do tu tin cuc thap thi mot minh no cung du de ket luan dang doan mo
+    if avg_logprob == avg_logprob and avg_logprob < avg_logprob_min - 0.4:
+        return True, f"avg_logprob={avg_logprob:.2f} (rat thap)"
 
     return False, ""

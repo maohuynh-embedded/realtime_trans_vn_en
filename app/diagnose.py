@@ -33,6 +33,9 @@ def main() -> None:
     seconds = float(args[0]) if args else DEFAULT_SECONDS
 
     cfg = default_config()
+    if "--vi" in sys.argv[1:]:
+        from app.config import listen_vi_to_en_direction
+        cfg.en2vi = listen_vi_to_en_direction()
     hw = detect()
 
     print("=" * 72)
@@ -40,6 +43,7 @@ def main() -> None:
     print("=" * 72)
     print(f"Phan cung : {hw.summary()}")
     print(f"STT       : Whisper '{cfg.stt.model_size}' / {cfg.stt.device} / {cfg.stt.compute_type}")
+    print(f"Nghe tieng: {cfg.en2vi.stt_language} -> dich sang {cfg.en2vi.tgt_language}")
     print(f"Dich      : {cfg.en2vi.mt_backend}")
     print(f"Cat cau   : im lang {cfg.audio.end_ring_ms}ms, toi da {cfg.audio.max_segment_s}s")
     print()
@@ -150,8 +154,8 @@ def main() -> None:
             flag = "  <-- CAU QUA NGAN (co the bi cat vun)"
 
         print(f"\n#{i}  {utt.duration_s:.1f}s  {spk}{flag}")
-        print(f"   EN : {text_en or '(khong nghe ra gi)'}")
-        print(f"   VI : {text_vi or '(khong co)'}")
+        print(f"   SRC: {text_en or '(khong nghe ra gi)'}")
+        print(f"   DST: {text_vi or '(khong co)'}")
         print(f"   tin cay={avg_lp:.2f}  im_lang={no_speech:.2f}  | STT {t_stt:.2f}s  dich {t_mt:.2f}s")
 
     # Tong ket chan doan
