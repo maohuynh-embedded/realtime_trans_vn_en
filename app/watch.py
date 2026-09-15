@@ -29,13 +29,19 @@ def main() -> None:
     listen_vi = "--vi" in args      # nguon la TIENG VIET (vd. ban be noi tieng Viet tren Discord)
 
     cfg = default_config()
-    if listen_vi:
+    if "--auto" in args:
+        from app.config import auto_listen_direction
+        cfg.en2vi = auto_listen_direction()
+    elif listen_vi:
         from app.config import listen_vi_to_en_direction
         cfg.en2vi = listen_vi_to_en_direction()
     cfg.en2vi.speak = speak
 
     print("=" * 66)
-    src, dst = ("VIET", "ANH") if listen_vi else ("ANH", "VIET")
+    if "--auto" in args:
+        src, dst = ("ANH + VIET LAN LON", "VIET")
+    else:
+        src, dst = ("VIET", "ANH") if listen_vi else ("ANH", "VIET")
     print(f"  DICH AM THANH TIENG {src}  ->  TIENG {dst}")
     print("=" * 66)
 

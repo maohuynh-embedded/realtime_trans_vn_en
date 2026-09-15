@@ -285,7 +285,10 @@ class DirectionPanel(ttk.LabelFrame):
         self.config(text=new_dir.label)
 
         # Doi tieu de 2 khung van ban cho khop ngon ngu moi
-        src_title = "Tieng Anh nghe duoc" if new_dir.stt_language == "en" else "Tieng Viet nghe duoc"
+        if new_dir.stt_language == "auto":
+            src_title = "Nguyen van (Anh hoac Viet)"
+        else:
+            src_title = "Tieng Anh nghe duoc" if new_dir.stt_language == "en" else "Tieng Viet nghe duoc"
         dst_title = "Ban dich tieng Viet" if new_dir.tgt_language == "vi" else "Ban dich tieng Anh"
         self.src_title_label.config(text=src_title)
         self.dst_title_label.config(text=dst_title)
@@ -315,9 +318,19 @@ class DirectionPanel(ttk.LabelFrame):
             self.pause_btn.config(text="Tiep tuc")
 
     def append(self, result) -> None:
-        prefix = f"{result.speaker_label}: " if result.speaker_label else ""
+        prefix = result.speaker_label or ""
+        # Che do tu nhan dien: cho biet cau nay Whisper nghe ra tieng gi
+        if result.detected_lang and self.direction.stt_language == "auto":
+            tag = "EN" if result.detected_lang == "en" else "VI"
+            prefix = f"{prefix} [{tag}]" if prefix else f"[{tag}]"
+        if prefix:
+            prefix += ": "
+
+        # Cau von da dung ngon ngu dich thi khong co ban dich - noi ro thay vi de trong
+        translated = result.translated_text or "(da dung ngon ngu dich, khong can dich)"
+
         for widget, text in ((self.src_text, result.source_text),
-                             (self.dst_text, result.translated_text)):
+                             (self.dst_text, translated)):
             if prefix:
                 widget.insert(tk.END, prefix, "spk")
             widget.insert(tk.END, text + "\n")

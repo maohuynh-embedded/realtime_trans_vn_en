@@ -31,6 +31,7 @@ class TranslationResult:
     translated_text: str
     duration_s: float
     speaker_label: str = ""   # vd. "Nguoi 1 (nam)" - de biet ai dang noi
+    detected_lang: str = ""   # ngon ngu doan duoc (che do tu nhan dien)
     lag_s: float = 0.0        # tu luc dut cau den luc bat dau nghe ban dich
     t_stt: float = 0.0
     t_mt: float = 0.0
@@ -235,12 +236,22 @@ class DirectionPipeline:
         # Bo loc ao giac co the loai bo cau. Phai BAO RO ly do, neu khong nguoi
         # dung chi thay app im lang ma khong biet tai sao (da gap dung loi nay).
         reasons: list[str] = []
-        source_text = stt.transcribe_pcm16(
-            utt.pcm16_bytes,
-            self.direction.stt_language,
-            self.audio_cfg.target_sample_rate,
-            reject_cb=reasons.append,
-        )
+        detected_lang = self.direction.stt_language
+
+        if self.direction.stt_language == "auto":
+            source_text, detected_lang = stt.transcribe_auto(
+                utt.pcm16_bytes,
+                candidates=("en", "vi"),
+                sample_rate=self.audio_cfg.target_sample_rate,
+                reject_cb=reasons.append,
+            )
+        else:
+            source_text = stt.transcribe_pcm16(
+                utt.pcm16_bytes,
+                self.direction.stt_language,
+                self.audio_cfg.target_sample_rate,
+                reject_cb=reasons.append,
+            )
         t_stt = time.monotonic() - t0
 
         if not source_text.strip():
@@ -250,13 +261,24 @@ class DirectionPipeline:
             self._set_status(f"Bo qua ({self.rejected_count}): {reason}")
             return
 
-        self._set_status("Dang dich...")
         t0 = time.monotonic()
-        translated = translator.translate(source_text)
+        if detected_lang == self.direction.tgt_language:
+            # Cau nay da dung ngon ngu dich roi -> khong dich lai, chi hien nguyen van.
+            # Tiet kiem thoi gian va tranh dich vong vo nghia (Viet -> Viet).
+            translated = ""
+            self._set_status(f"Nghe tieng {detected_lang} (khong can dich)")
+        elif self.direction.stt_language == "auto":
+            self._set_status(f"Dang dich {detected_lang} -> {self.direction.tgt_language}...")
+            translated = self.hub.ensure_translator(
+                detected_lang, self.direction.tgt_language
+            ).translate(source_text)
+        else:
+            self._set_status("Dang dich...")
+            translated = translator.translate(source_text)
         t_mt = time.monotonic() - t0
 
         t_tts = 0.0
-        if self.speak.is_set():
+        if self.speak.is_set() and translated:
             self._set_status("Dang doc ban dich...")
             t0 = time.monotonic()
             pcm, sr = tts.synthesize(translated)
@@ -278,6 +300,7 @@ class DirectionPipeline:
                 translated_text=translated,
                 duration_s=utt.duration_s,
                 speaker_label=speaker_label,
+                detected_lang=detected_lang,
                 lag_s=time.monotonic() - utt.captured_at,
                 t_stt=t_stt,
                 t_mt=t_mt,

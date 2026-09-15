@@ -87,3 +87,45 @@ class SpeechToText:
             return ""
 
         return text
+
+    def detect_language(self, pcm16_bytes: bytes, candidates=("en", "vi")) -> tuple[str, float]:
+        """Doan ngon ngu cua MOT cau, gioi han trong `candidates`.
+
+        Vi sao gioi han: de Whisper tu do trong 99 ngon ngu thi tieng Viet hay bi
+        nham sang tieng Trung/Thai, con tieng Anh giong Viet hay bi nham sang cac
+        thu tieng khac. Biet truoc cuoc noi chuyen chi co Anh + Viet thi chi can
+        so xac suat giua hai cai do -> on dinh hon han.
+        """
+        audio = np.frombuffer(pcm16_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        lang, prob, all_probs = self.model.detect_language(audio)
+
+        scores = dict(all_probs)
+        best = max(candidates, key=lambda c: scores.get(c, 0.0))
+        return best, float(scores.get(best, prob if best == lang else 0.0))
+
+    def transcribe_auto(
+        self,
+        pcm16_bytes: bytes,
+        candidates=("en", "vi"),
+        sample_rate: int = 16000,
+        reject_cb=None,
+    ) -> tuple[str, str]:
+        """Tu doan ngon ngu roi phien am. Tra ve (van_ban, ngon_ngu_doan_duoc).
+
+        Dung cho cuoc noi chuyen NOI LAN nhieu thu tieng (vd. choi game voi ban,
+        cau tieng Viet xen cau tieng Anh). Ep mot ngon ngu co dinh cho ca phien
+        thi kieu gi cung sai mot nua.
+        """
+        too_quiet, rms = is_too_quiet(pcm16_bytes)
+        if too_quiet:
+            if reject_cb:
+                reject_cb(f"qua nho (RMS={rms:.4f})")
+            return "", ""
+
+        try:
+            lang, _prob = self.detect_language(pcm16_bytes, candidates)
+        except Exception:
+            lang = candidates[0]
+
+        text = self.transcribe_pcm16(pcm16_bytes, lang, sample_rate, reject_cb=reject_cb)
+        return text, lang

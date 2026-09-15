@@ -126,10 +126,35 @@ def listen_vi_to_en_direction() -> DirectionConfig:
     )
 
 
+def auto_listen_direction() -> DirectionConfig:
+    """Tu nhan dien ngon ngu TUNG CAU, dich moi thu sang tieng Viet.
+
+    Dung khi cuoc noi chuyen NOI LAN Anh voi Viet (vd. choi game voi ban: cau
+    tieng Viet xen cau tieng Anh, xen thuat ngu game). Ep mot ngon ngu co dinh
+    cho ca phien thi kieu gi cung sai mot nua.
+
+    Cau nao von da la tieng Viet thi giu nguyen, khong dich - chi cac cau tieng
+    Anh moi duoc dich sang Viet.
+
+    Danh doi: them ~0.1-0.3s moi cau cho buoc doan ngon ngu, va cau qua ngan
+    thi doan de sai.
+    """
+    return DirectionConfig(
+        key="en2vi",
+        label="Tu nhan dien (Anh + Viet lan lon) -> Viet",
+        source="loopback",
+        stt_language="auto",
+        tgt_language="vi",
+        tts_onnx="models/piper/vi_VN-vais1000-medium.onnx",
+        tts_json="models/piper/vi_VN-vais1000-medium.onnx.json",
+    )
+
+
 # Cac cap ngon ngu chon duoc cho khung "nghe am thanh may"
 LISTEN_DIRECTIONS = {
     "en2vi": ("Nghe tieng ANH  ->  dich sang Viet", en_to_vi_direction),
     "vi2en": ("Nghe tieng VIET ->  dich sang Anh", listen_vi_to_en_direction),
+    "auto": ("TU NHAN DIEN (Anh + Viet lan lon)", auto_listen_direction),
 }
 
 

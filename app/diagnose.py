@@ -33,7 +33,10 @@ def main() -> None:
     seconds = float(args[0]) if args else DEFAULT_SECONDS
 
     cfg = default_config()
-    if "--vi" in sys.argv[1:]:
+    if "--auto" in sys.argv[1:]:
+        from app.config import auto_listen_direction
+        cfg.en2vi = auto_listen_direction()
+    elif "--vi" in sys.argv[1:]:
         from app.config import listen_vi_to_en_direction
         cfg.en2vi = listen_vi_to_en_direction()
     hw = detect()
@@ -125,9 +128,16 @@ def main() -> None:
     for i, utt in enumerate(utterances, 1):
         audio = np.frombuffer(utt.pcm16_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
+        lang = cfg.en2vi.stt_language
+        if lang == "auto":
+            try:
+                lang, _p = stt.detect_language(utt.pcm16_bytes, ("en", "vi"))
+            except Exception:
+                lang = "en"
+
         t0 = time.time()
         segments, info = stt.model.transcribe(
-            audio, language=cfg.en2vi.stt_language,
+            audio, language=lang,
             beam_size=cfg.stt.beam_size, vad_filter=False,
         )
         segs = list(segments)
@@ -139,7 +149,12 @@ def main() -> None:
         no_speech = float(np.mean([s.no_speech_prob for s in segs])) if segs else float("nan")
 
         t0 = time.time()
-        text_vi = translator.translate(text_en) if text_en else ""
+        if text_en and lang != cfg.en2vi.tgt_language:
+            tr = (hub.ensure_translator(lang, cfg.en2vi.tgt_language)
+                  if cfg.en2vi.stt_language == "auto" else translator)
+            text_vi = tr.translate(text_en)
+        else:
+            text_vi = "(khong can dich)" if text_en else ""
         t_mt = time.time() - t0
 
         try:

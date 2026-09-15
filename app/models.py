@@ -65,3 +65,15 @@ class ModelHub:
             tts.synthesize(translator.translate(warm_text))
         except Exception:
             pass  # warm-up that bai khong phai loi nghiem trong, van chay duoc
+
+    def ensure_translator(self, src_lang: str, tgt_lang: str) -> Translator:
+        """Lay (hoac tao) translator cho mot cap ngon ngu bat ky.
+
+        Che do tu nhan dien can cai nay: khong biet truoc cau tiep theo la tieng
+        gi nen khong the buoc translator vao mot DirectionConfig co dinh.
+        """
+        key = f"{src_lang}2{tgt_lang}"
+        if key not in self._translators:
+            self._status(f"Dang tai model dich {src_lang} -> {tgt_lang}...")
+            self._translators[key] = Translator(src_lang=src_lang, tgt_lang=tgt_lang)
+        return self._translators[key]
