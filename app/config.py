@@ -1,0 +1,125 @@
+"""Cau hinh trung tam cho toan bo pipeline.
+
+App ho tro 2 CHIEU doc lap, co the bat/tat rieng:
+  - EN->VI: bat am thanh cuoc hop (WASAPI loopback) -> ban nghe tieng Viet.
+  - VI->EN: bat MIC cua ban -> doi tac nghe tieng Anh.
+"""
+from dataclasses import dataclass, field
+
+
+@dataclass
+class AudioConfig:
+    # Dinh dang chuan ma VAD/Whisper can
+    target_sample_rate: int = 16000
+    target_channels: int = 1
+    # webrtcvad chi nhan frame 10/20/30ms -> chon 30ms cho on dinh
+    vad_frame_ms: int = 30
+
+    # Nguong bat dau / ket thuc cau (mo ta trong HUONG_DAN_XAY_DUNG.md muc 3.2)
+    start_ring_ms: int = 300       # ring buffer khi "chua bat dau cau"
+    start_trigger_ratio: float = 0.6  # ty le frame co tieng noi de coi la bat dau
+
+    end_ring_ms: int = 700
+    """Bao lau im lang thi coi la HET CAU.
+
+    Danh doi truc tiep giua do tre va do vun:
+      - Qua ngan (450ms): cat nham vao cho ngap ngung giua cau -> ra cac manh vun
+        kieu "Do you have" / "I also" / "Maybe I can tra-", dich thanh vo nghia.
+      - Qua dai (>1s): cau tron ven hon nhung phai cho lau hon moi co ban dich.
+    700ms: khoang nghi giua 2 cau thuong >700ms, con ngap ngung giua cau thuong
+    200-500ms, nen tach duoc kha sach.
+    """
+    end_trigger_ratio: float = 0.6    # ty le frame im lang de coi la ket thuc
+
+    max_segment_s: float = 8.0     # nguong cat cuong buc, tranh do tre don qua lon
+    vad_aggressiveness: int = 2    # 0..3, cao hon = loc tap am manh hon
+
+
+@dataclass
+class SttConfig:
+    """Dung chung cho ca 2 chieu - chi load 1 model Whisper duy nhat.
+
+    Ngon ngu KHONG nam o day ma nam trong DirectionConfig, vi moi chieu
+    nghe mot thu tieng khac nhau.
+    """
+    model_size: str = "small"      # "base" neu can nhanh hon, "medium" neu can chinh xac hon
+    device: str = "cpu"
+    compute_type: str = "int8"
+    beam_size: int = 1
+    vad_filter: bool = False       # da tu cat cau o buoc VAD rieng
+
+
+@dataclass
+class DirectionConfig:
+    """Mo ta mot chieu dich hoan chinh."""
+    key: str                # "en2vi" | "vi2en"
+    label: str              # ten hien thi tren GUI
+    source: str             # "loopback" (am thanh cuoc hop) | "mic" (giong cua ban)
+    stt_language: str       # ngon ngu NGUON ma Whisper se nghe
+    tgt_language: str       # ngon ngu DICH RA
+    mt_backend: str = "nllb"        # "nllb" (chinh xac hon) | "marian" (nhe hon)
+    mt_model: str | None = None     # de None = dung model mac dinh cua backend
+    tts_onnx: str = ""      # giong Piper cho ngon ngu DICH
+    tts_json: str = ""
+    tts_length_scale: float = 1.0   # >1 = doc cham hon, <1 = doc nhanh hon
+    enabled: bool = True
+    speak: bool = True
+    """Co doc ban dich thanh tieng khong.
+
+    Tat di (chi hien text tren GUI) rat huu ich cho chieu Anh->Viet khi may khong
+    du thiet bi phat rieng biet: ban nghe truc tiep giong goc cua doi tac va doc
+    ban dich tren man hinh, nho vay tranh duoc vong lap 'ban dich bi loopback bat
+    lai roi dich tiep'. Xem muc 'Dinh tuyen am thanh' trong README.
+    """
+
+
+def en_to_vi_direction() -> DirectionConfig:
+    """Doi tac noi tieng Anh -> ban nghe tieng Viet qua tai nghe."""
+    return DirectionConfig(
+        key="en2vi",
+        label="Anh -> Viet (nghe doi tac)",
+        source="loopback",
+        stt_language="en",
+        tgt_language="vi",
+        tts_onnx="models/piper/vi_VN-vais1000-medium.onnx",
+        tts_json="models/piper/vi_VN-vais1000-medium.onnx.json",
+    )
+
+
+def vi_to_en_direction() -> DirectionConfig:
+    """Ban noi tieng Viet -> doi tac nghe tieng Anh.
+
+    Luu y: output cua chieu nay phai duoc dinh tuyen vao app hop lam MIC
+    (xem README muc 'Dua tieng Anh vao Zoom/Teams'), khong phai phat ra tai nghe cua ban.
+    """
+    return DirectionConfig(
+        key="vi2en",
+        label="Viet -> Anh (doi tac nghe)",
+        source="mic",
+        stt_language="vi",
+        tgt_language="en",
+        tts_onnx="models/piper/en_US-lessac-medium.onnx",
+        tts_json="models/piper/en_US-lessac-medium.onnx.json",
+        enabled=False,   # mac dinh TAT, bat bang nut tren GUI khi can noi
+    )
+
+
+@dataclass
+class AppConfig:
+    audio: AudioConfig = field(default_factory=AudioConfig)
+    stt: SttConfig = field(default_factory=SttConfig)
+    en2vi: DirectionConfig = field(default_factory=en_to_vi_direction)
+    vi2en: DirectionConfig = field(default_factory=vi_to_en_direction)
+
+
+def default_config(auto_hardware: bool = True) -> AppConfig:
+    """Tao cau hinh mac dinh.
+
+    auto_hardware=True se tu do phan cung (GPU/CPU) va chinh SttConfig cho phu hop,
+    de cung bo code chay toi uu tren ca may co GPU lan may chi co CPU.
+    """
+    cfg = AppConfig()
+    if auto_hardware:
+        from app.hardware import apply_to
+        apply_to(cfg)
+    return cfg

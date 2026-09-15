@@ -1,0 +1,21 @@
+# Realtime Meeting Translator (EN -> VI, offline)
+# Python 3.10/3.11/3.12, 64-bit Windows
+
+PyAudioWPatch      # WASAPI loopback capture (no VB-CABLE / driver / admin needed)
+sounddevice        # playback to real headset output
+numpy
+scipy              # resampling 48kHz -> 16kHz
+webrtcvad-wheels    # VAD with prebuilt Windows wheels (import name: webrtcvad)
+faster-whisper     # CTranslate2 Whisper, CPU int8
+transformers       # MarianMT (Helsinki-NLP/opus-mt-en-vi)
+sentencepiece      # tokenizer required by MarianMT
+sacremoses         # tokenizer helper recommended by MarianMT
+torch              # xem ghi chu GPU o duoi
+piper-tts          # Vietnamese/English TTS
+
+# --- May CO GPU NVIDIA (vd. RTX 2060): cai them de chay Whisper tren GPU ---
+# Nhanh hon ~4x VA chinh xac hon (dung duoc model 'medium' thay vi 'small'):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126 --force-reinstall
+#   pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+# App tu do phan cung (app/hardware.py) nen KHONG can sua config khi doi may.
+# May khong co GPU se tu dung CPU + int8 nhu cu.

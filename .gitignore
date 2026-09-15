@@ -1,0 +1,34 @@
+# Virtualenv
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Model weights (tai ve khi chay lan dau - xem README)
+models/
+*.onnx
+*.onnx.json
+*.ckpt
+*.bin
+*.safetensors
+
+# OpenVINO IR da export
+*.xml
+*.mapping
+ov_models/
+
+# Audio tam
+*.wav
+*.mp3
+reference.wav
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
