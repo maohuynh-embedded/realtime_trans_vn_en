@@ -18,9 +18,13 @@ class SpeechToText:
         self.cfg = cfg
         if cfg.device == "cuda":
             ensure_cuda_dlls()
+        # faster-whisper nhan ca ten co ("small") lan duong dan thu muc model
+        from app.offline import local_model_path
+        model_ref = local_model_path(f"whisper-{cfg.model_size}") or cfg.model_size
+
         try:
             self.model = WhisperModel(
-                cfg.model_size,
+                model_ref,
                 device=cfg.device,
                 compute_type=cfg.compute_type,
             )
@@ -30,7 +34,7 @@ class SpeechToText:
             # GPU khong dung duoc (thieu driver/DLL) -> lui ve CPU thay vi chet han
             self.cfg = replace(cfg, device="cpu", compute_type="int8")
             self.model = WhisperModel(
-                self.cfg.model_size,
+                model_ref,
                 device="cpu",
                 compute_type="int8",
             )

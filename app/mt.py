@@ -46,7 +46,7 @@ class Translator:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         if backend == "nllb":
-            self.model_name = model_name or NLLB_DEFAULT
+            self.model_name = model_name or self._resolve_nllb()
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, src_lang=_NLLB_LANG[src_lang])
             self._forced_bos = self.tokenizer.convert_tokens_to_ids(_NLLB_LANG[tgt_lang])
         else:
@@ -56,6 +56,12 @@ class Translator:
 
         self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name).to(self.device)
         self.model.eval()
+
+    @staticmethod
+    def _resolve_nllb() -> str:
+        """Dung ban da xuat san di kem neu co, khong thi tai tu Hugging Face."""
+        from app.offline import local_model_path
+        return local_model_path("nllb-600m") or NLLB_DEFAULT
 
     @torch.inference_mode()
     def translate(self, text: str) -> str:

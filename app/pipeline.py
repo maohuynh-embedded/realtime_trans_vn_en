@@ -124,6 +124,9 @@ class DirectionPipeline:
         if self._capture is not None:
             self._capture.stop()
             self._capture = None
+        # Cat ngang tieng dang doc, neu khong luong phat se giu tien trinh song
+        if self._player is not None:
+            self._player.abort()
         self._set_status("Da dung.")
 
     def pause(self) -> None:

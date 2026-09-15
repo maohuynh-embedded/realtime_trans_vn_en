@@ -10,6 +10,7 @@ truc tiep tu thread khac (Tkinter khong thread-safe).
 
 Chay: python main.py
 """
+import os
 import queue
 import threading
 import tkinter as tk
@@ -436,6 +437,8 @@ class App(tk.Tk):
 
         self.refresh_devices()
         self._apply_mode()
+        # Bat nut X tren thanh tieu de, de con don dep truoc khi thoat
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(POLL_MS, self._poll)
 
     # ---- thanh chon che do ----
@@ -617,14 +620,44 @@ class App(tk.Tk):
 
         self.after(POLL_MS, self._poll)
 
-    def destroy(self) -> None:
+    def _on_close(self) -> None:
+        """Nguoi dung bam X: dung het roi moi dong."""
+        self._shutdown()
+        self.destroy()
+
+    def _shutdown(self) -> None:
+        """Dung moi thu dang chay. Goi duoc nhieu lan khong sao."""
         for panel in self.panels.values():
-            panel.stop()
+            try:
+                panel.stop()
+            except Exception:
+                pass
+        try:
+            import sounddevice as sd
+            sd.stop()     # cat ngang tieng dang phat
+        except Exception:
+            pass
+
+    def destroy(self) -> None:
+        self._shutdown()
         super().destroy()
 
 
 def main() -> None:
-    App().mainloop()
+    app = App()
+    try:
+        app.mainloop()
+    finally:
+        try:
+            app._shutdown()
+        except Exception:
+            pass
+
+    # Thoat han. PortAudio va cac thu vien model deu tao luong NEN (native thread)
+    # ma Python khong quan ly duoc; chung co the giu tien trinh song mai du cua so
+    # da dong - trieu chung "tat app tu UI ma app van chay ngam". Den day moi thu
+    # da duoc dung sach nen cat han la an toan.
+    os._exit(0)
 
 
 if __name__ == "__main__":

@@ -66,3 +66,14 @@ class Player:
                 pass
 
             self._status_cb(f"Loi phat audio: {first_error}")
+
+    def abort(self) -> None:
+        """Cat ngang am thanh dang phat.
+
+        Can khi dong app: sd.play(blocking=True) dang cho phat het cau se giu
+        luong PortAudio song, khien tien trinh khong thoat du cua so da dong.
+        """
+        try:
+            sd.stop()
+        except Exception:
+            pass

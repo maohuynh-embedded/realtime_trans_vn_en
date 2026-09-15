@@ -34,6 +34,11 @@ def main() -> None:
     from app.quiet import setup_quiet
     setup_quiet()
 
+    # PHAI chay truoc khi import transformers/faster-whisper thi moi co tac dung:
+    # neu co thu muc model di kem thi tro cache sang do va chay offline hoan toan.
+    from app.offline import setup_offline
+    setup_offline()
+
     args = sys.argv[1:]
 
     if "--devices" in args:
