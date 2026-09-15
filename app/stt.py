@@ -10,6 +10,7 @@ from faster_whisper import WhisperModel
 
 from app.config import SttConfig
 from app.cuda_setup import ensure_cuda_dlls
+from app.hallucination import is_too_quiet, should_reject
 
 
 class SpeechToText:
@@ -34,16 +35,55 @@ class SpeechToText:
                 compute_type="int8",
             )
 
-    def transcribe_pcm16(self, pcm16_bytes: bytes, language: str, sample_rate: int = 16000) -> str:
+    def transcribe_pcm16(
+        self,
+        pcm16_bytes: bytes,
+        language: str,
+        sample_rate: int = 16000,
+        reject_cb=None,
+    ) -> str:
         """Nhan PCM16 mono bytes (dau ra cua VAD), tra ve text o ngon ngu `language`.
 
         Co dinh `language` (khong de Whisper tu doan) de giam tre va tang do chinh xac.
+
+        Tra ve CHUOI RONG neu doan audio khong co tieng noi that. Khi gap im lang,
+        Whisper khong tra ve rong ma BIA ra cau quen thuoc tu du lieu huan luyen
+        ("Thanks for watching!", "you", ...) - xem app/hallucination.py. `reject_cb`
+        neu co se duoc goi voi ly do loai bo, tien cho viec chan doan.
         """
+        # Lop 1: qua nho thi khong chay Whisper luon - vua nhanh vua tranh bia chu
+        too_quiet, rms = is_too_quiet(pcm16_bytes)
+        if too_quiet:
+            if reject_cb:
+                reject_cb(f"qua nho (RMS={rms:.4f})")
+            return ""
+
         audio_f32 = np.frombuffer(pcm16_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         segments, _info = self.model.transcribe(
             audio_f32,
             language=language,
             beam_size=self.cfg.beam_size,
             vad_filter=self.cfg.vad_filter,
+            # Khong cho Whisper nhin cau truoc: neu no da bia 1 lan, dieu kien hoa
+            # theo van ban truoc se khien no lap lai cai bia do mai.
+            condition_on_previous_text=False,
         )
-        return " ".join(seg.text.strip() for seg in segments).strip()
+
+        segs = list(segments)
+        if not segs:
+            if reject_cb:
+                reject_cb("khong co doan nao")
+            return ""
+
+        text = " ".join(seg.text.strip() for seg in segs).strip()
+        avg_logprob = float(np.mean([s.avg_logprob for s in segs]))
+        no_speech = float(np.mean([s.no_speech_prob for s in segs]))
+
+        # Lop 2-4
+        reject, reason = should_reject(text, no_speech, avg_logprob)
+        if reject:
+            if reject_cb:
+                reject_cb(f"{reason}: {text[:40]!r}")
+            return ""
+
+        return text

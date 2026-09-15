@@ -3,6 +3,7 @@
   python main.py --watch             -> DON GIAN NHAT: dich video dang xem, tu do thiet bi
   python main.py --watch --speak     -> nhu tren nhung doc to ban dich
   python main.py --levels            -> xem am thanh dang phat ra thiet bi nao
+  python main.py --diagnose          -> soi tung buoc de tim cho dich sai
   python main.py                     -> mo GUI (ca 2 chieu)
   python main.py --console           -> console, chieu Anh->Viet (nghe doi tac)
   python main.py --console --vi2en   -> console, chieu Viet->Anh (doi tac nghe ban)
@@ -28,6 +29,9 @@ def _force_utf8_console() -> None:
 
 def main() -> None:
     _force_utf8_console()
+    from app.quiet import setup_quiet
+    setup_quiet()
+
     args = sys.argv[1:]
 
     if "--devices" in args:
@@ -43,6 +47,11 @@ def main() -> None:
     if "--watch" in args:
         from app.watch import main as watch_main
         watch_main()
+        return
+
+    if "--diagnose" in args:
+        from app.diagnose import main as diag_main
+        diag_main()
         return
 
     if "--levels" in args:

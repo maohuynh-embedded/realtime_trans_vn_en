@@ -111,6 +111,7 @@ class _EcapaEmbedder:
     def __init__(self):
         import torch
         from speechbrain.inference.speaker import EncoderClassifier
+        from speechbrain.utils.fetching import LocalStrategy
 
         self.torch = torch
         # speechbrain can dang "cuda:0", khong nhan "cuda" tran
@@ -119,6 +120,9 @@ class _EcapaEmbedder:
             source="speechbrain/spkrec-ecapa-voxceleb",
             savedir="models/ecapa",
             run_opts={"device": self.device},
+            # Windows khong tao duoc symlink neu khong bat Developer Mode ->
+            # speechbrain canh bao va co the that bai. COPY thi luon chay duoc.
+            local_strategy=LocalStrategy.COPY,
         )
 
     @classmethod
@@ -197,10 +201,6 @@ class SpeakerTracker:
     @property
     def using_ecapa(self) -> bool:
         return self._embedder is not None
-        self._centroids: list[np.ndarray] = []
-        self._counts: list[int] = []
-        self._f0_sums: list[float] = []
-        self._f0_counts: list[int] = []
 
     def identify(self, pcm16_bytes: bytes, sample_rate: int = 16000) -> SpeakerInfo:
         f0 = estimate_f0(pcm16_bytes, sample_rate)
