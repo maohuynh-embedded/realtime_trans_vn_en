@@ -33,5 +33,8 @@ def setup_quiet() -> None:
     )
     logging.getLogger("speechbrain.utils.parameter_transfer").setLevel(logging.ERROR)
 
-    # 4. Thanh tien trinh "Loading weights: 100%|...|" cua transformers
-    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    # 4. KHONG tat thanh tien trinh tai model.
+    #    Da thu tat (HF_HUB_DISABLE_PROGRESS_BARS) va do la mot sai lam: lan dau
+    #    tai model co the mat vai phut, khong co thanh tien trinh thi nguoi dung
+    #    thay app dung im va tuong bi TREO. Thanh tien trinh o day la thong tin
+    #    can thiet, khong phai nhieu.
