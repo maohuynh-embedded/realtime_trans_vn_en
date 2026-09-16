@@ -105,12 +105,19 @@ def main() -> None:
     if not no_tag:
         existing_tags = sh("git", "tag", "-l", version)
         if existing_tags:
-            print(f"\n!! Tag {version} da ton tai. Chon so khac hoac xoa tag cu (git tag -d {version}).")
-            sys.exit(1)
-
-        print(f"\n  Dang tao git tag {version}...")
-        tag_msg = f"{PROJECT_NAME} {version}\n\n{notes}"
-        sh("git", "tag", "-a", version, "-m", tag_msg)
+            # Tag da co (vd. lan truoc tao tag xong nhung buoc dong goi bi loi)
+            # - khong loi cung, chi bo qua buoc tao va dong goi lai tu tag do.
+            tagged_commit = sh("git", "rev-list", "-n", "1", version)
+            head_commit = sh("git", "rev-parse", "HEAD")
+            if tagged_commit != head_commit:
+                print(f"\n!! Tag {version} da ton tai nhung TRO TOI COMMIT KHAC voi HEAD hien tai.")
+                print(f"   Chon so phien ban khac, hoac xoa tag cu (git tag -d {version}) neu chac chan.")
+                sys.exit(1)
+            print(f"\n  Tag {version} da co san (tro dung HEAD hien tai) - bo qua buoc tao, dong goi lai.")
+        else:
+            print(f"\n  Dang tao git tag {version}...")
+            tag_msg = f"{PROJECT_NAME} {version}\n\n{notes}"
+            sh("git", "tag", "-a", version, "-m", tag_msg)
 
         if push:
             print(f"  Dang day tag len GitHub...")
@@ -137,7 +144,7 @@ def main() -> None:
     root_folder = f"{PROJECT_NAME}-{version}"
     with zipfile.ZipFile(tmp_zip, "r") as src, zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as dst:
         for item in src.infolist():
-            data = src.read(item.name)
+            data = src.read(item.filename)
             dst.writestr(f"{root_folder}/{item.filename}", data)
     tmp_zip.unlink()
 
