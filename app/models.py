@@ -29,32 +29,52 @@ class ModelHub:
             self.stt = SpeechToText(self.cfg.stt)
         return self.stt
 
-    def ensure_direction(self, direction: DirectionConfig) -> tuple[Translator, TextToSpeech]:
-        """Load (neu chua co) model MT + TTS cho 1 chieu, roi tra ve.
-
-        Cache danh dau theo CAP NGON NGU va TEP GIONG, khong phai theo
-        direction.key. Ly do: ca ba che do nghe (Anh->Viet, Viet->Anh, tu nhan
-        dien) deu dung chung key "en2vi", nen neu danh dau theo key thi doi che
-        do se lay nham model cua che do truoc - dich sai ngon ngu va doc sai
-        giong, ma khong bao loi gi.
-        """
+    @staticmethod
+    def _resolve_mt_langs(direction: DirectionConfig) -> tuple[str, str]:
         tgt = direction.tgt_language
         src = direction.stt_language
         if src == "auto":
             # Che do tu nhan dien: dung cap pho bien nhat lam mac dinh, moi cau
             # se tu lay translator dung theo ngon ngu doan duoc.
             src = "en" if tgt == "vi" else "vi"
+        return src, tgt
 
-        translator = self.ensure_translator(src, tgt)
+    def ensure_translator_for(self, direction: DirectionConfig) -> Translator:
+        """Lay translator cho 1 chieu, KHONG dong cham gi den TTS.
 
+        Dung khi khong can doc thanh tieng (mac dinh cua app: nguoi dung doc
+        duoc ca 2 thu tieng nen chi can phu de) - tranh nap Piper vo ich, ton
+        RAM/VRAM va thoi gian khoi dong ma khong ai dung toi.
+        """
+        src, tgt = self._resolve_mt_langs(direction)
+        return self.ensure_translator(src, tgt)
+
+    def ensure_tts(self, direction: DirectionConfig) -> TextToSpeech:
+        """Lay (hoac nap moi) giong doc Piper cho 1 chieu. Nap THAT SU, khong tre hoan."""
         tts_key = direction.tts_onnx
         if tts_key not in self._tts:
             self._status(f"Dang tai giong doc {Path(tts_key).stem}...")
             self._tts[tts_key] = TextToSpeech(
                 direction.tts_onnx, direction.tts_json, direction.tts_length_scale
             )
+        return self._tts[tts_key]
 
-        return translator, self._tts[tts_key]
+    def ensure_direction(self, direction: DirectionConfig) -> tuple[Translator, TextToSpeech]:
+        """Load model MT + TTS cho 1 chieu, roi tra ve ca hai.
+
+        Cache danh dau theo CAP NGON NGU va TEP GIONG, khong phai theo
+        direction.key. Ly do: ca ba che do nghe (Anh->Viet, Viet->Anh, tu nhan
+        dien) deu dung chung key "en2vi", nen neu danh dau theo key thi doi che
+        do se lay nham model cua che do truoc - dich sai ngon ngu va doc sai
+        giong, ma khong bao loi gi.
+
+        Nap CA TTS du direction.speak co tat hay khong - dung khi can san sang
+        doc bat cu luc nao (vd. cong cu chan doan). DirectionPipeline khong dung
+        ham nay de khoi dong nua, no goi rieng ensure_translator_for() + tai TTS
+        tre hoan trong ensure_tts() de tranh nap Piper khi khong can.
+        """
+        translator = self.ensure_translator_for(direction)
+        return translator, self.ensure_tts(direction)
 
     def reset_stt(self) -> None:
         """Bo model Whisper dang giu (de load lai voi co khac).
@@ -65,16 +85,17 @@ class ModelHub:
         self.stt = None
 
     def warm_up(self, direction: DirectionConfig) -> None:
-        """Chay thu 1 lan qua ca 3 model cua 1 chieu.
+        """Chay thu 1 lan qua cac model dang THAT SU dung cho 1 chieu.
 
         Lan goi dau tien cua moi model cham hon han cac lan sau (vd. Piper: RTF 0.67
         lan dau vs 0.04 cac lan sau), nen "dot nong" truoc de cau dau tien khong bi
-        tre bat thuong.
+        tre bat thuong. CHI dot nong TTS neu direction.speak dang bat - neu khong
+        se vo tinh nap Piper cho mot chieu khong bao gio dung toi no.
         """
         import numpy as np
 
         stt = self.ensure_stt()
-        translator, tts = self.ensure_direction(direction)
+        translator = self.ensure_translator_for(direction)
         self._status(f"Dang lam nong {direction.label}...")
         try:
             silence = np.zeros(self.cfg.audio.target_sample_rate // 2, dtype=np.int16).tobytes()
@@ -82,8 +103,9 @@ class ModelHub:
             if warm_lang == "auto":
                 warm_lang = "en" if direction.tgt_language == "vi" else "vi"
             stt.transcribe_pcm16(silence, warm_lang, self.cfg.audio.target_sample_rate)
-            warm_text = "xin chào" if warm_lang == "vi" else "hello"
-            tts.synthesize(translator.translate(warm_text))
+            if direction.speak:
+                warm_text = "xin chào" if warm_lang == "vi" else "hello"
+                self.ensure_tts(direction).synthesize(translator.translate(warm_text))
         except Exception:
             pass  # warm-up that bai khong phai loi nghiem trong, van chay duoc
 

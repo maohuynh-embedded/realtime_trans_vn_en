@@ -33,7 +33,13 @@ def setup_quiet() -> None:
     )
     logging.getLogger("speechbrain.utils.parameter_transfer").setLevel(logging.ERROR)
 
-    # 4. KHONG tat thanh tien trinh tai model.
+    # 4. "incorrect regex pattern" khi nap tokenizer tu thu muc CTranslate2 da
+    #    xuat (models/bundled/nllb-*-ct2). Loi cua chinh thu vien tokenizers khi
+    #    doc file config xuat boi ctranslate2-converter, khong anh huong ket qua
+    #    dich - da so sanh dau ra voi ban transformers goc, giong het.
+    warnings.filterwarnings("ignore", message=".*incorrect regex pattern.*")
+
+    # 5. KHONG tat thanh tien trinh tai model.
     #    Da thu tat (HF_HUB_DISABLE_PROGRESS_BARS) va do la mot sai lam: lan dau
     #    tai model co the mat vai phut, khong co thanh tien trinh thi nguoi dung
     #    thay app dung im va tuong bi TREO. Thanh tien trinh o day la thong tin

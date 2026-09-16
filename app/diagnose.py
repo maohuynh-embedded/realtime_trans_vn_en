@@ -50,6 +50,9 @@ def main() -> None:
     print("  CHAN DOAN CHAT LUONG DICH")
     print("=" * 72)
     print(f"Phan cung : {hw.summary()}")
+
+    if hw.has_cuda:
+        _warn_gpu_contention()
     print(f"STT       : Whisper '{cfg.stt.model_size}' / {cfg.stt.device} / {cfg.stt.compute_type}")
     print(f"Nghe tieng: {cfg.en2vi.stt_language} -> dich sang {cfg.en2vi.tgt_language}")
     print(f"Dich      : {cfg.en2vi.mt_backend}")
@@ -214,3 +217,29 @@ def main() -> None:
 
 if __name__ == "__main__":
     sys.exit(main() or 0)
+
+
+def _warn_gpu_contention() -> None:
+    """Canh bao neu GPU dang bi app KHAC chiem dung (game, trinh duyet nang...).
+
+    Da gap that: chay --test ngay khi dang mo Teamfight Tactics -> STT tu 1s
+    nhay len 51s, dich tu 0.6s len 64s. Khong phai loi cua app - GPU 6GB bi
+    tranh chap giua game va model thi ca hai deu cham di ro ret. Bao truoc de
+    nguoi dung khong tuong nham la app bi hong.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+        util, used, total = (int(x) for x in out.split(","))
+    except Exception:
+        return
+
+    if util > 50 or used > total * 0.5:
+        print(f"!! GPU dang ban: {util}% su dung, {used}/{total}MB VRAM - CO THE la")
+        print("   nguyen nhan chinh khien app cham, KHONG phai loi cau hinh. Kiem tra")
+        print("   xem co dang mo game/trinh duyet nang khac dung GPU khong.")

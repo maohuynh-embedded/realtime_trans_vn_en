@@ -100,7 +100,13 @@ class DirectionPipeline:
 
     def load_models(self) -> None:
         self.hub.ensure_stt()
-        self.hub.ensure_direction(self.direction)
+        self.hub.ensure_translator_for(self.direction)
+        # TTS (Piper) chi nap khi THAT SU can doc thanh tieng - checkbox "Doc
+        # thanh tieng" tat (vd. --watch mac dinh, hoac nguoi dung tu tat) thi
+        # khong dung toi Piper mot chut nao, tranh ton RAM/VRAM va thoi gian
+        # khoi dong vo ich. Neu can, no se duoc nap tre hoan trong _process().
+        if self.direction.speak:
+            self.hub.ensure_tts(self.direction)
         self.hub.warm_up(self.direction)
         self._player = Player(self.output_device, status_cb=self._set_status)
 
@@ -177,7 +183,7 @@ class DirectionPipeline:
 
     def _worker_loop(self) -> None:
         stt = self.hub.ensure_stt()
-        translator, tts = self.hub.ensure_direction(self.direction)
+        translator = self.hub.ensure_translator_for(self.direction)
 
         while not self._stop_event.is_set():
             try:
@@ -191,7 +197,7 @@ class DirectionPipeline:
             utt, dropped = self._skip_backlog(utt)
 
             try:
-                self._process(utt, stt, translator, tts, dropped)
+                self._process(utt, stt, translator, dropped)
             except Exception as exc:
                 # Mot cau loi khong duoc lam chet ca pipeline - bao roi di tiep
                 self._set_status(f"Loi khi xu ly cau: {exc}")
@@ -220,7 +226,7 @@ class DirectionPipeline:
             self._set_status(f"Tut lai -> bo qua {dropped} cau cu de duoi kip")
         return utt, dropped
 
-    def _process(self, utt, stt, translator, tts, dropped: int = 0) -> None:
+    def _process(self, utt, stt, translator, dropped: int = 0) -> None:
         """Xu ly 1 cau: STT -> MT -> TTS -> phat."""
         # Nhan dien nguoi noi TRUOC khi dich (chay tren audio goc, rat nhanh)
         speaker_label = ""
@@ -282,8 +288,11 @@ class DirectionPipeline:
 
         t_tts = 0.0
         if self.speak.is_set() and translated:
+            # Nap Piper tai day neu chua co - lan doc dau tien se cham hon mot
+            # chut (vai giay) nhung chi xay ra dung mot lan.
             self._set_status("Dang doc ban dich...")
             t0 = time.monotonic()
+            tts = self.hub.ensure_tts(self.direction)
             pcm, sr = tts.synthesize(translated)
             t_tts = time.monotonic() - t0
             if not self._paused.is_set():
