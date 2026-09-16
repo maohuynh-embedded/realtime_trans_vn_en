@@ -198,6 +198,33 @@ def prefetch_models(full: bool) -> None:
         "print('   ECAPA:', 'OK' if t.using_ecapa else 'khong tai duoc')\n"
     ) % ROOT
     run([str(venv_python()), "-c", code], "tai truoc model", check=False)
+    convert_nllb_ct2()
+
+
+def convert_nllb_ct2() -> None:
+    """Chuyen NLLB-600M sang CTranslate2 int8 - giam VRAM ~73% (do thuc te).
+
+    mt.py tu chon ban nay khi co san trong models/bundled/nllb-600m-ct2/. Khong
+    dua vao git (models/ da gitignore, nang ~600MB) nen may nao cung phai tu
+    convert 1 lan - buoc nay lam viec do.
+    """
+    out_dir = ROOT / "models" / "bundled" / "nllb-600m-ct2"
+    if out_dir.is_dir() and any(out_dir.iterdir()):
+        print(f"  Da co san: {out_dir}")
+        return
+
+    print("  Dang chuyen NLLB-600M sang CTranslate2 int8 (giam ~73% VRAM)...")
+    converter = VENV / ("Scripts/ct2-transformers-converter.exe" if os.name == "nt"
+                        else "bin/ct2-transformers-converter")
+    ok = run(
+        [str(converter), "--model", "facebook/nllb-200-distilled-600M",
+         "--output_dir", str(out_dir), "--quantization", "int8_float16",
+         "--copy_files", "tokenizer.json", "sentencepiece.bpe.model",
+         "special_tokens_map.json", "tokenizer_config.json"],
+        "chuyen NLLB sang CTranslate2", check=False,
+    )
+    if not ok:
+        print("  ! Chuyen doi that bai -> app van chay duoc bang ban transformers goc, chi nang hon.")
 
 
 def run_selftest(skip: bool) -> None:
