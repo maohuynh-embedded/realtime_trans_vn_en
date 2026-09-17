@@ -23,6 +23,42 @@ from app.models import ModelHub
 from app.pipeline import DirectionPipeline
 
 
+def _warn_if_noisy_device(source) -> None:
+    """Do nhanh 1 giay xem thiet bi loopback co dang bi 'on' boi app khac khong.
+
+    WASAPI loopback bat TOAN BO am thanh cua thiet bi, khong rieng gi video ban
+    muon dich. Da gap that: game chay nen (Discord, trinh duyet, nhac...) phat
+    tieng qua CUNG thiet bi lam nhieu tin hieu, khien VAD kho tach cau sach -
+    trieu chung la app "nghe" nhung khong bao gio dich duoc gi. Canh bao truoc
+    de nguoi dung khong phai doan mo tai sao.
+    """
+    import numpy as np
+    from app.capture import LoopbackCapture
+
+    cap = LoopbackCapture(device=source)
+    try:
+        cap.start()
+        samples = []
+        t_end = time.time() + 1.0
+        while time.time() < t_end:
+            try:
+                chunk = cap.out_queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            mono = chunk.mean(axis=1) if chunk.ndim > 1 else chunk
+            samples.append(float(np.sqrt(np.mean(mono.astype(np.float64) ** 2))))
+    finally:
+        cap.stop()
+
+    if samples and max(samples) > 0.05:
+        print("\n  !! CANH BAO: thiet bi nay dang co am thanh NEN ngay ca khi video")
+        print("     im lang (RMS toi da = %.3f). Loopback bat TOAN BO am thanh cua" % max(samples))
+        print("     thiet bi, khong rieng video - neu co app khac (game, nhac, Discord)")
+        print("     dang phat qua CUNG thiet bi nay, tin hieu se bi tron lan va VAD kho")
+        print("     tach cau sach -> co the khong dich duoc gi ca ma khong bao loi.")
+        print("     Dong hoac tat tieng cac app khac dang dung thiet bi nay roi thu lai.")
+
+
 def main() -> None:
     args = sys.argv[1:]
     speak = "--speak" in args
@@ -56,6 +92,7 @@ def main() -> None:
         return
 
     print(f"--> Bat am thanh tu: {source.name}")
+    _warn_if_noisy_device(source)
 
     # Noi phat ban dich (chi dung khi --speak)
     if speak:
@@ -86,13 +123,23 @@ def main() -> None:
     print("  DANG NGHE. Nhan Ctrl+C de dung.")
     print("=" * 66 + "\n")
 
+    last_status = ""
     try:
         while True:
             while True:
                 try:
-                    status_q.get_nowait()   # nuot status cho man hinh gon
+                    msg = status_q.get_nowait()
                 except queue.Empty:
                     break
+                # Nuot cac trang thai binh thuong ("Dang nghe...", "Dang dich...")
+                # cho man hinh gon, NHUNG phai in ra loi va cau bi tu choi - neu
+                # khong nguoi dung se thay man hinh trong khong ma khong biet tai
+                # sao (da gap dung truong hop nay: bo loc loai het moi cau ma
+                # khong ai thay ly do vi status bi nuot sach).
+                if "Loi" in msg or "Bo qua" in msg:
+                    if msg != last_status:   # tranh in lap cung 1 loi lien tuc
+                        print(f"  [!] {msg}")
+                        last_status = msg
             try:
                 r = result_q.get(timeout=0.2)
                 print(f"  EN  {r.source_text}")
