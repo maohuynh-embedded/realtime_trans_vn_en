@@ -1,10 +1,15 @@
 """Ghep pipeline bang thread + queue (muc 4 cua HUONG_DAN_XAY_DUNG.md):
 
   [Audio callback] -> raw_queue -> [VAD thread] -> utterance_queue
-      -> [Worker thread: STT -> MT -> TTS -> play] -> result_queue (GUI/console doc)
+      -> [STT thread: nhan dien nguoi noi + Whisper] -> recognized_queue
+      -> [MT+TTS thread: dich + doc + phat] -> result_queue (GUI/console doc)
 
-Moi buoc toc do khac nhau nen tach thread, khong xu ly tuan tu trong 1 vong lap -
-neu khong audio capture se bi nghen trong luc Whisper dang chay.
+BA giai doan tach rieng (khong phai hai) - day la diem quan trong: neu STT va
+MT+TTS dung CHUNG 1 thread thi trong luc dang dich/doc cau N, Whisper CHUA HE
+bat dau nghe cau N+1 - do tre MT+TTS cong don thang vao do tre cam nhan, khong
+duoc "giau" di. Tach STT ra rieng thi trong luc thread MT+TTS dang ban voi cau
+N, thread STT co the da nghe xong cau N+1 va co san trong recognized_queue -
+do tre MT+TTS phan lon duoc giau sau do tre STT cua cau tiep theo.
 
 Moi CHIEU dich la mot DirectionPipeline rieng; hai chieu chay song song va dung
 chung ModelHub (1 model Whisper cho ca hai).
@@ -22,6 +27,22 @@ from app.playback import Player
 from app.resample import prepare_for_vad
 from app.speaker import SpeakerTracker
 from app.vad_segmenter import VadSegmenter
+
+
+@dataclass
+class _Recognized:
+    """Ket qua giai doan STT - dau vao cua giai doan MT+TTS.
+
+    Giu lai captured_at cua utterance goc de tinh dung do tre tu luc dut cau,
+    khong phai tu luc STT xong.
+    """
+    source_text: str
+    detected_lang: str
+    speaker_label: str
+    duration_s: float
+    captured_at: float
+    t_stt: float
+    dropped: int = 0   # so utterance bi bo qua TRUOC KHI toi duoc STT
 
 
 @dataclass
@@ -63,6 +84,7 @@ class DirectionPipeline:
 
         self._raw_queue: queue.Queue = queue.Queue()
         self._utterance_queue: queue.Queue = queue.Queue()
+        self._recognized_queue: "queue.Queue[_Recognized]" = queue.Queue()
 
         self._capture = None
         self._stop_event = threading.Event()
@@ -122,7 +144,8 @@ class DirectionPipeline:
         self._capture.start()
 
         threading.Thread(target=self._vad_loop, daemon=True).start()
-        threading.Thread(target=self._worker_loop, daemon=True).start()
+        threading.Thread(target=self._stt_loop, daemon=True).start()
+        threading.Thread(target=self._translate_loop, daemon=True).start()
         self._set_status("Dang nghe...")
 
     def stop(self) -> None:
@@ -181,9 +204,41 @@ class DirectionPipeline:
         if final_utt is not None:
             self._utterance_queue.put(final_utt)
 
-    def _worker_loop(self) -> None:
+    def _skip_backlog(self, item, src_queue: queue.Queue, kind: str):
+        """Neu queue dang don u, bo cac muc CU va chi giu muc MOI NHAT.
+
+        Dung chung cho ca 2 diem vao (truoc STT va truoc MT+TTS): khi may xu ly
+        cham hon toc do noi, cac muc xep hang va do tre tang dan vo han - nghe
+        ban dich cua chuyen da xay ra 30 giay truoc thi vo nghia. Tha bo vai muc
+        con hon tre don. Chi lam khi thuc su tut lai (max_lag_s), tat han bang
+        drop_when_behind. `item` phai co thuoc tinh `captured_at`.
+        """
+        dropped = 0
+        if not self.drop_when_behind:
+            return item, 0
+
+        while (time.monotonic() - item.captured_at) > self.max_lag_s:
+            try:
+                newer = src_queue.get_nowait()
+            except queue.Empty:
+                break
+            dropped += 1
+            item = newer
+
+        if dropped:
+            self._set_status(f"Tut lai ({kind}) -> bo qua {dropped} cau cu de duoi kip")
+        return item, dropped
+
+    # ---- Giai doan 2: STT (+ nhan dien nguoi noi) ----
+
+    def _stt_loop(self) -> None:
+        """Rieng mot thread: chi lam STT, khong dung cham gi den MT/TTS.
+
+        Tach khoi giai doan dich/doc de trong luc giai doan sau dang ban voi
+        cau N, thread nay van nghe tiep duoc cau N+1 - giau bot do tre MT+TTS
+        thay vi cong don tuan tu.
+        """
         stt = self.hub.ensure_stt()
-        translator = self.hub.ensure_translator_for(self.direction)
 
         while not self._stop_event.is_set():
             try:
@@ -194,41 +249,15 @@ class DirectionPipeline:
             if utt.duration_s < 0.2 or self._paused.is_set():
                 continue  # bo qua cau qua ngan (nhieu / tieng dong)
 
-            utt, dropped = self._skip_backlog(utt)
+            utt, dropped = self._skip_backlog(utt, self._utterance_queue, "truoc STT")
 
             try:
-                self._process(utt, stt, translator, dropped)
+                self._run_stt(utt, stt, dropped)
             except Exception as exc:
-                # Mot cau loi khong duoc lam chet ca pipeline - bao roi di tiep
-                self._set_status(f"Loi khi xu ly cau: {exc}")
+                self._set_status(f"Loi khi nhan dang: {exc}")
 
-    def _skip_backlog(self, utt):
-        """Neu queue dang don u, bo cac cau CU va chi giu cau MOI NHAT.
-
-        Khi may xu ly cham hon toc do noi, cac cau xep hang trong queue va do tre
-        tang dan vo han - nghe ban dich cua chuyen da xay ra 30 giay truoc thi vo
-        nghia. Tha bo vai cau con hon tre don. Chi lam khi thuc su tut lai
-        (max_lag_s), va tat han duoc bang drop_when_behind.
-        """
-        dropped = 0
-        if not self.drop_when_behind:
-            return utt, 0
-
-        while (time.monotonic() - utt.captured_at) > self.max_lag_s:
-            try:
-                newer = self._utterance_queue.get_nowait()
-            except queue.Empty:
-                break
-            dropped += 1
-            utt = newer
-
-        if dropped:
-            self._set_status(f"Tut lai -> bo qua {dropped} cau cu de duoi kip")
-        return utt, dropped
-
-    def _process(self, utt, stt, translator, dropped: int = 0) -> None:
-        """Xu ly 1 cau: STT -> MT -> TTS -> phat."""
-        # Nhan dien nguoi noi TRUOC khi dich (chay tren audio goc, rat nhanh)
+    def _run_stt(self, utt, stt, dropped: int) -> None:
+        # Nhan dien nguoi noi TRUOC khi STT (chay tren audio goc, rat nhanh)
         speaker_label = ""
         if self.identify_speakers:
             try:
@@ -237,7 +266,7 @@ class DirectionPipeline:
                 )
                 speaker_label = info.label
             except Exception:
-                pass   # khong nhan dien duoc thi van dich binh thuong
+                pass   # khong nhan dien duoc thi van tiep tuc binh thuong
 
         self._set_status("Dang nhan dang (STT)...")
         t0 = time.monotonic()
@@ -270,20 +299,55 @@ class DirectionPipeline:
             self._set_status(f"Bo qua ({self.rejected_count}): {reason}")
             return
 
+        self._recognized_queue.put(
+            _Recognized(
+                source_text=source_text,
+                detected_lang=detected_lang,
+                speaker_label=speaker_label,
+                duration_s=utt.duration_s,
+                captured_at=utt.captured_at,
+                t_stt=t_stt,
+                dropped=dropped,
+            )
+        )
+
+    # ---- Giai doan 3: MT + TTS + phat ----
+
+    def _translate_loop(self) -> None:
+        translator = self.hub.ensure_translator_for(self.direction)
+
+        while not self._stop_event.is_set():
+            try:
+                rec = self._recognized_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            if self._paused.is_set():
+                continue
+
+            rec, extra_dropped = self._skip_backlog(rec, self._recognized_queue, "truoc dich")
+
+            try:
+                self._translate_and_speak(rec, translator, rec.dropped + extra_dropped)
+            except Exception as exc:
+                # Mot cau loi khong duoc lam chet ca pipeline - bao roi di tiep
+                self._set_status(f"Loi khi dich: {exc}")
+
+    def _translate_and_speak(self, rec: _Recognized, translator, dropped: int) -> None:
         t0 = time.monotonic()
-        if detected_lang == self.direction.tgt_language:
+        if rec.detected_lang == self.direction.tgt_language:
             # Cau nay da dung ngon ngu dich roi -> khong dich lai, chi hien nguyen van.
             # Tiet kiem thoi gian va tranh dich vong vo nghia (Viet -> Viet).
             translated = ""
-            self._set_status(f"Nghe tieng {detected_lang} (khong can dich)")
+            self._set_status(f"Nghe tieng {rec.detected_lang} (khong can dich)")
         elif self.direction.stt_language == "auto":
-            self._set_status(f"Dang dich {detected_lang} -> {self.direction.tgt_language}...")
+            self._set_status(f"Dang dich {rec.detected_lang} -> {self.direction.tgt_language}...")
             translated = self.hub.ensure_translator(
-                detected_lang, self.direction.tgt_language
-            ).translate(source_text)
+                rec.detected_lang, self.direction.tgt_language
+            ).translate(rec.source_text)
         else:
             self._set_status("Dang dich...")
-            translated = translator.translate(source_text)
+            translated = translator.translate(rec.source_text)
         t_mt = time.monotonic() - t0
 
         t_tts = 0.0
@@ -308,13 +372,13 @@ class DirectionPipeline:
         self.result_queue.put(
             TranslationResult(
                 direction_key=self.direction.key,
-                source_text=source_text,
+                source_text=rec.source_text,
                 translated_text=translated,
-                duration_s=utt.duration_s,
-                speaker_label=speaker_label,
-                detected_lang=detected_lang,
-                lag_s=time.monotonic() - utt.captured_at,
-                t_stt=t_stt,
+                duration_s=rec.duration_s,
+                speaker_label=rec.speaker_label,
+                detected_lang=rec.detected_lang,
+                lag_s=time.monotonic() - rec.captured_at,
+                t_stt=rec.t_stt,
                 t_mt=t_mt,
                 t_tts=t_tts,
                 dropped=dropped,
