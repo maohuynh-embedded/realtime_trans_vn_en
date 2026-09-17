@@ -48,6 +48,22 @@ class SttConfig:
     beam_size: int = 1
     vad_filter: bool = False       # da tu cat cau o buoc VAD rieng
 
+    initial_prompt: str = ""
+    """Goi y ngu canh cho Whisper - ten rieng, thuat ngu, cach viet uu tien.
+
+    Whisper uu tien nghe ra dung cac tu trong prompt thay vi doan ra tu gan
+    giong nhat. Cong cu manh nhat de xu ly giong noi co accent nang (vd. giong
+    Anh kieu Nhat: "desk" nghe thanh "desuku", "strike" thanh "sutoraiku") - vi
+    prompt neo Whisper ve dung tu tieng Anh du am thanh bi bien dang nhieu.
+
+    Vi du: "Meeting about Q3 revenue, project Phoenix, with Tanaka-san and
+    Suzuki-san from Yamamoto Corp." - liet ke ten nguoi, ten cong ty, thuat
+    ngu du kien se xuat hien trong cuoc hop/video sap nghe.
+
+    De trong = khong dung prompt (mac dinh, tuong thich nguoc). Chinh trong
+    GUI truoc khi Bat, hoac sua truc tiep o day cho phien lam viec co dinh.
+    """
+
 
 @dataclass
 class DirectionConfig:

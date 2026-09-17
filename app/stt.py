@@ -71,6 +71,7 @@ class SpeechToText:
             # Khong cho Whisper nhin cau truoc: neu no da bia 1 lan, dieu kien hoa
             # theo van ban truoc se khien no lap lai cai bia do mai.
             condition_on_previous_text=False,
+            initial_prompt=self.cfg.initial_prompt or None,
         )
 
         segs = list(segments)

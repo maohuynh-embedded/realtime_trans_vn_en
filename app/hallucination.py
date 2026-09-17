@@ -171,8 +171,18 @@ def should_reject(
     if bad_no_speech and bad_logprob:
         return True, f"no_speech={no_speech_prob:.2f} va logprob={avg_logprob:.2f}"
 
-    # Do tu tin cuc thap thi mot minh no cung du de ket luan dang doan mo
-    if avg_logprob == avg_logprob and avg_logprob < avg_logprob_min - 0.4:
-        return True, f"avg_logprob={avg_logprob:.2f} (rat thap)"
+    # Do tu tin cuc thap MOT MINH cung du de loai - NHUNG chi khi cau NGAN.
+    #
+    # Bai hoc (nguoi dung bao that): giong tieng Anh co accent nang (vd. giong
+    # Nhat) khien Whisper tu nhien bao avg_logprob thap hon nhieu so voi giong
+    # ban ngu, DU NGHE DUNG NOI DUNG. Luat cu loai bat ke do dai cau -> xoa mat
+    # ca cau dai co noi dung that, chi vi giong co accent. Cau cang dai thi cang
+    # it kha nang la "doan mo lung tung" (ao giac Whisper thuong ra cau ngan,
+    # lap) va cang nhieu kha nang la loi noi that bi nghe accent nang - nen chi
+    # loai theo avg_logprob don doc khi cau NGAN (<= 4 tu), con cau dai thi giu
+    # lai (nguoi dung tu doc va danh gia, con hon la mat trang khong thay gi).
+    word_count = len(_normalize(text).split())
+    if avg_logprob == avg_logprob and avg_logprob < avg_logprob_min - 0.4 and word_count <= 4:
+        return True, f"avg_logprob={avg_logprob:.2f} (rat thap, cau ngan)"
 
     return False, ""
