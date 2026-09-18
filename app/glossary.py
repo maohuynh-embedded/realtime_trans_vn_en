@@ -86,6 +86,67 @@ _PHRASES: dict[str, str | None] = {
     "voltage regulator": "IC ổn áp",
     "signal integrity": "toàn vẹn tín hiệu",
     "root cause": "nguyên nhân gốc rễ",
+
+    # --- RTOS / embedded chuyen sau ---
+    "context switch": "chuyển ngữ cảnh",
+    "task scheduler": "bộ lập lịch",
+    "priority inversion": "đảo ưu tiên",
+    "stack pointer": "con trỏ stack",
+    "program counter": "bộ đếm chương trình",
+    "hard real-time": "thời gian thực cứng",
+    "soft real-time": "thời gian thực mềm",
+    "clock domain crossing": "chuyển miền xung nhịp",
+    "bit banging": "bit banging",
+    "nested interrupt": "ngắt lồng",
+    "memory mapped io": "IO ánh xạ bộ nhớ",
+    "direct memory access": "truy cập bộ nhớ trực tiếp",
+
+    # --- Bo nho / hieu nang ---
+    "cache line": "dòng cache",
+    "cache miss": "cache miss",
+    "page fault": "page fault",
+    "virtual memory": "bộ nhớ ảo",
+
+    # --- PCB / dien tu sau hon ---
+    "surface mount": "dán bề mặt",
+    "through hole": "xuyên lỗ",
+    "trace width": "độ rộng đường mạch",
+    "impedance matching": "phối hợp trở kháng",
+    "decoupling capacitor": "tụ lọc nguồn",
+    "bypass capacitor": "tụ bypass",
+    "level shifter": "IC chuyển mức",
+    "pull-up network": "mạng pull-up",
+
+    # --- Mang / he thong ---
+    "packet loss": "mất gói tin",
+    "round trip time": "thời gian khứ hồi",
+    "load balancer": "load balancer",
+    "reverse proxy": "reverse proxy",
+    "network interface card": "card mạng",
+
+    # --- Git / quan ly ma nguon ---
+    "pull request": "pull request",
+    "merge conflict": "xung đột merge",
+    "commit history": "lịch sử commit",
+    "feature branch": "nhánh tính năng",
+    "code review": "review code",
+
+    # --- DevOps / cloud ---
+    "continuous integration": "tích hợp liên tục",
+    "continuous deployment": "triển khai liên tục",
+    "container orchestration": "điều phối container",
+
+    # --- Kiem thu ---
+    "unit test": "unit test",
+    "integration test": "integration test",
+    "test coverage": "độ phủ kiểm thử",
+    "mock object": "mock object",
+
+    # --- Cau truc du lieu ---
+    "linked list": "danh sách liên kết",
+    "hash table": "bảng băm",
+    "binary tree": "cây nhị phân",
+    "priority queue": "hàng đợi ưu tiên",
 }
 
 # ---------------------------------------------------------------------------
@@ -93,7 +154,12 @@ _PHRASES: dict[str, str | None] = {
 # ---------------------------------------------------------------------------
 _WORDS: dict[str, str | None] = {
     # --- Giao tiep / giao thuc: giu nguyen (quy uoc pho bien) ---
-    "uart": None, "spi": None, "i2c": None, "usb": None, "can": None,
+    "uart": None, "spi": None, "i2c": None, "usb": None,
+    # LUU Y: KHONG dua "can" (giao thuc CAN bus) vao day rieng le - da gap
+    # loi that: khop trung voi dong tu "can" ("Can you...") vi so khop khong
+    # phan biet hoa-thuong, lam hong ca cau ("Can you open..." -> "Can ban
+    # mo..."). "CAN bus" van duoc bao ve qua cum "can bus" trong _PHRASES,
+    # chi khong bao ve duoc khi dung "CAN" mot minh (hiem gap hon nhieu).
     "lin": None, "rs232": None, "rs485": None, "ethernet": None,
     "wifi": None, "bluetooth": None, "ble": None, "lora": None,
     "zigbee": None, "mqtt": None, "tcp": None, "udp": None,
@@ -136,6 +202,54 @@ _WORDS: dict[str, str | None] = {
     "ground": "mass",
     "thread": "luồng",
     "threads": "các luồng",
+    "oscillator": "bộ dao động",
+    "crystal": "thạch anh",
+    "inductor": "cuộn cảm",
+    "potentiometer": "biến trở",
+    "relay": "rơ-le",
+    "solenoid": "solenoid",
+    "connector": "đầu nối",
+
+    # --- Mang / giao thuc: giu nguyen (quy uoc pho bien) ---
+    "socket": None, "packet": None, "gateway": None, "router": None,
+    "firewall": None, "vpn": None, "dns": None, "dhcp": None,
+    "ssl": None, "tls": None, "ssh": None, "ftp": None, "port": None,
+
+    # --- Git / quan ly phien ban: giu nguyen ---
+    # LUU Y: "commit"/"branch"/"merge"/"rebase"/"clone"/"fork"/"stash" O DAY
+    # DA BI BO - deu la tu VUA danh tu VUA dong tu. Da do thuc te: bao ve
+    # "rebase" dung mot minh lam CAU SUP HOAN TOAN khi no dung o vi tri dong
+    # tu dau cau menh lenh ("Please rebase your..." -> "Lam on... ..dua ra
+    # con truoc khi ..." - NLLB mat phuong huong ngu phap, sinh dau "..." thay
+    # vi noi dung). Van duoc bao ve khi nam trong CUM co san ("merge conflict",
+    # "feature branch" trong _PHRASES) - o do co du ngu canh xung quanh nen
+    # an toan hon. Danh tu THUAN TUY (repository) thi giu lai duoc.
+    "repository": None,
+
+    # --- DevOps / cloud: giu nguyen ---
+    "docker": None, "kubernetes": None, "container": None,
+    "microservice": None, "pipeline": None, "deployment": None,
+    "rollback": None,
+
+    # --- Nen tang lap trinh: giu nguyen (thuat ngu CS chuan) ---
+    "stack": None, "heap": None, "recursion": None, "iterator": None,
+    "generic": None, "template": None, "inheritance": None,
+    "polymorphism": None, "encapsulation": None, "abstraction": None,
+    "queue": None,
+
+    # --- "False friend" - tu tieng Anh thong dung nhung mang nghia ky thuat
+    # KHAC HAN nghia thuong ngay, NLLB de bi nham sang nghia thuong ngay.
+    # CHI giu lai o day cac tu THUONG DUNG NHU DANH TU trong cau ky thuat
+    # (bus, plane, frame, buffer, driver, host, routine) - cac tu vua danh tu
+    # vua dong tu de gay sup cau nhu "rebase" (mount, pipe, stream, flag,
+    # handle, cache) DA BO, cung ly do nhu tren.
+    "driver": None,     # trinh dieu khien, khong phai "tai xe"
+    "host": None,       # may chu/thiet bi chinh, khong phai "chu nha"
+    "frame": None,      # khung du lieu/anh, khong phai "khung tranh"
+    "buffer": None,     # vung dem du lieu, khong phai "vung dem va cham"
+    "bus": None,        # bus du lieu, khong phai "xe buyt"
+    "plane": None,      # lop/mat phang, khong phai "may bay"
+    "routine": None,    # chuong trinh con, khong phai "thoi quen"
 }
 
 
