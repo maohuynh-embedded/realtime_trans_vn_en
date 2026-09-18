@@ -44,6 +44,9 @@ def main() -> None:
     elif "--vi" in sys.argv[1:]:
         from app.config import listen_vi_to_en_direction
         cfg.en2vi = listen_vi_to_en_direction()
+    if "--tech" in sys.argv[1:]:
+        from app.config import apply_domain_prompt
+        apply_domain_prompt(cfg)
     hw = detect()
 
     print("=" * 72)

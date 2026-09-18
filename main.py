@@ -6,6 +6,9 @@
   python main.py --diagnose          -> soi tung buoc de tim cho dich sai
   Them --vi vao --watch/--diagnose   -> nguon la TIENG VIET (dich sang Anh)
   Them --auto                        -> TU NHAN DIEN tung cau (Anh + Viet lan lon)
+  Them --tech vao --watch/--diagnose -> chuyen nganh embedded/software/hardware
+                                         (nghe dung thuat ngu hon + bao ve khoi
+                                         dich sai UART/bus/thread/resistor...)
   python main.py                     -> mo GUI (ca 2 chieu)
   python main.py --console           -> console, chieu Anh->Viet (nghe doi tac)
   python main.py --console --vi2en   -> console, chieu Viet->Anh (doi tac nghe ban)

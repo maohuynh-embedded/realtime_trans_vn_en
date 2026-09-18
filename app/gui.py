@@ -113,6 +113,19 @@ class DirectionPanel(ttk.LabelFrame):
             ctrl, text="Doc thanh tieng", variable=self.speak_var, command=self._on_speak_toggle
         ).pack(side=tk.LEFT, padx=6)
 
+        # Chuyen nganh embedded/software/hardware: nhet tu vung ky thuat vao
+        # Whisper (nghe dung UART/GPIO/bus... hon) + bao ve thuat ngu khoi bi
+        # NLLB dich sai (xem app/glossary.py - vd "I2C bus" tung bi dich thanh
+        # "xe buyt I2C", "ground plane" thanh "may bay mat dat"). Phan bao ve
+        # thuat ngu LUON BAT (an toan, khong lam gi khi khong co thuat ngu);
+        # checkbox nay chi bat/tat PHAN NGHE (initial_prompt) vi no CO THE lam
+        # lech nhe cach Whisper nghe noi dung khong lien quan ky thuat.
+        self.tech_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            ctrl, text="Chuyen nganh embedded/SW/HW", variable=self.tech_var,
+            command=self._on_tech_toggle,
+        ).pack(side=tk.LEFT, padx=6)
+
         self.lag_var = tk.StringVar(value="")
         ttk.Label(ctrl, textvariable=self.lag_var, foreground="#888").pack(side=tk.LEFT, padx=10)
 
@@ -363,6 +376,29 @@ class DirectionPanel(ttk.LabelFrame):
             else:
                 self.pipeline.speak.clear()
         self.app.check_warnings()
+
+    def _on_tech_toggle(self) -> None:
+        """Bat/tat initial_prompt chuyen nganh cho Whisper.
+
+        CHI CO 1 Whisper dung chung ca 2 chieu (xem app/models.py: ensure_stt()
+        la singleton), nen cai nay la CAI DAT CHUNG - khong rieng cho tung
+        khung. Dong bo lai checkbox o khung kia de UI khong hien trang thai
+        mau thuan. Thay doi co hieu luc NGAY tu cau tiep theo, khong can Tat/
+        Bat lai (SpeechToText.transcribe_pcm16 doc self.cfg.initial_prompt
+        MOI LAN goi, khong cache).
+        """
+        from app.config import DOMAIN_PROMPTS
+
+        on = self.tech_var.get()
+        self.app.cfg.stt.initial_prompt = DOMAIN_PROMPTS["embedded_sw_hw"] if on else ""
+
+        for panel in self.app.panels.values():
+            if panel is not self and panel.tech_var.get() != on:
+                panel.tech_var.set(on)
+
+        self.status_var.set(
+            "Da bat che do chuyen nganh embedded/SW/HW." if on else "Da tat che do chuyen nganh."
+        )
 
     def _on_pause(self) -> None:
         if self.pipeline is None:

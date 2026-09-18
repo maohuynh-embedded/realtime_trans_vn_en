@@ -38,6 +38,8 @@ TOI UU TAI (do thuc te, khong doan):
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+from app.glossary import protect_terms, restore_terms
+
 # Ma ngon ngu cua NLLB
 _NLLB_LANG = {"en": "eng_Latn", "vi": "vie_Latn"}
 
@@ -148,6 +150,17 @@ class Translator:
 
     @torch.inference_mode()
     def translate(self, text: str) -> str:
+        """Bao ve thuat ngu chuyen nganh (glossary) TRUOC khi goi model, phuc
+        hoi lai SAU khi dich xong - ap dung chung cho ca 2 backend (CTranslate2
+        va transformers) o day, tranh trung lap logic. Xem app/glossary.py de
+        biet ly do va cac loi thuc te da do duoc (vd. NLLB dich "I2C bus"
+        thanh "xe buyt I2C", "ground plane" thanh "may bay mat dat").
+        """
+        protected, restore = protect_terms(text)
+        result = self._translate_raw(protected)
+        return restore_terms(result, restore)
+
+    def _translate_raw(self, text: str) -> str:
         if self._ct2 is not None:
             return self._ct2.translate(text)
 

@@ -193,3 +193,32 @@ def default_config(auto_hardware: bool = True) -> AppConfig:
         from app.hardware import apply_to
         apply_to(cfg)
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Preset ngu canh chuyen nganh cho Whisper (initial_prompt) - danh cho hop/
+# video ve embedded, phan mem, phan cung. Nhet danh sach thuat ngu vao day de
+# Whisper UU TIEN nghe ra dung cac tu nay thay vi doan ra tu gan giong nhat.
+#
+# Chi anh huong STT (nghe ra chu gi); phan BAO VE khoi dich sai thuat ngu nam
+# o app/glossary.py (buoc MT, khac loi).
+#
+# De MAC DINH TAT (initial_prompt="") vi nhet san tu vung ky thuat co the lam
+# lech nhe cach Whisper nghe cac cuoc hop KHONG lien quan ky thuat - bat len
+# bang --tech (CLI) hoac o GUI khi biet truoc noi dung se nghe la ky thuat.
+DOMAIN_PROMPTS: dict[str, str] = {
+    "embedded_sw_hw": (
+        "Technical discussion about embedded systems, software, and hardware "
+        "engineering. Topics include UART, SPI, I2C, GPIO, PWM, ADC, DAC, DMA, "
+        "MCU, CPU, FPGA, ASIC, RTOS, firmware, bootloader, kernel, driver, "
+        "interrupt service routine, watchdog timer, race condition, mutex, "
+        "semaphore, buffer overflow, memory leak, PCB, ground plane, resistor, "
+        "capacitor, transistor, JTAG, SWD, datasheet, register, toolchain, "
+        "compiler, debugger, GitHub, pull request, API, SDK."
+    ),
+}
+
+
+def apply_domain_prompt(cfg: AppConfig, domain: str = "embedded_sw_hw") -> None:
+    """Bat initial_prompt theo linh vuc cho SttConfig (mac dinh: embedded/sw/hw)."""
+    cfg.stt.initial_prompt = DOMAIN_PROMPTS.get(domain, "")

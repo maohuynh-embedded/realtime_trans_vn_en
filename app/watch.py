@@ -73,6 +73,11 @@ def main() -> None:
         cfg.en2vi = listen_vi_to_en_direction()
     cfg.en2vi.speak = speak
 
+    if "--tech" in args:
+        from app.config import apply_domain_prompt
+        apply_domain_prompt(cfg)   # nhet tu vung embedded/software/hardware cho Whisper
+        print("  (che do chuyen nganh embedded/software/hardware - da bat initial_prompt)")
+
     print("=" * 66)
     if "--auto" in args:
         src, dst = ("ANH + VIET LAN LON", "VIET")
