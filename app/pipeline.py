@@ -45,6 +45,54 @@ class _Recognized:
     dropped: int = 0   # so utterance bi bo qua TRUOC KHI toi duoc STT
 
 
+_SENTENCE_END = (".", "!", "?", "...", "。", "！", "？", "…")
+
+# Bao lau toi da cho mot cau CHUA ket thuc bang dau cau truoc khi dich cuong
+# buc phan da co. Bao ve khoi treo vo han neu Whisper khong bao gio xuat dau
+# cau (vd. noi lien tuc khong nghi).
+_MAX_BUFFER_WAIT_S = 4.0
+_MAX_BUFFER_PARTS = 4
+
+
+@dataclass
+class _PendingBuffer:
+    """Gom nhieu _Recognized LIEN TIEP thanh 1 cau hoan chinh truoc khi dich.
+
+    Ly do can cai nay (phat hien tu log that): VAD hay cat giua mau, sinh ra
+    cac doan nhu "...which was why I chose to follow this" + "career path."
+    rieng le. Dich TUNG DOAN mot khien NLLB phai doan mo phan con thieu ("theo
+    doi" thay vi "theo duoi"), hoac lam mat han noi dung ("What are your
+    weaknesses?" bi rot mat khi dich rieng). Gop van ban GOC lai truoc khi dich
+    thi NLLB co du ngu canh de dich dung, dung "chap va" ban dich sau khi da
+    dich rieng (khong lam duoc vi khong can duoc tu voi tu giua 2 ban dich).
+    """
+    text: str
+    detected_lang: str
+    speaker_label: str
+    duration_s: float
+    captured_at: float     # cua MANH DAU TIEN - de tinh dung do tre tu luc dut cau
+    t_stt: float            # cong don ca cac manh
+    dropped: int            # cong don ca cac manh
+    started_at: float       # gio (monotonic) mo buffer - cho kiem tra timeout
+    n_parts: int = 1
+
+    def append(self, rec: "_Recognized", extra_dropped: int = 0) -> None:
+        self.text = f"{self.text} {rec.source_text}".strip()
+        self.duration_s += rec.duration_s
+        self.t_stt += rec.t_stt
+        self.dropped += rec.dropped + extra_dropped
+        self.n_parts += 1
+
+    @property
+    def is_complete(self) -> bool:
+        """Da ket thuc bang dau cau, hoac da cho/gom qua nguong an toan."""
+        if self.text.rstrip().endswith(_SENTENCE_END):
+            return True
+        if self.n_parts >= _MAX_BUFFER_PARTS:
+            return True
+        return (time.monotonic() - self.started_at) > _MAX_BUFFER_WAIT_S
+
+
 @dataclass
 class TranslationResult:
     direction_key: str
@@ -315,23 +363,71 @@ class DirectionPipeline:
 
     def _translate_loop(self) -> None:
         translator = self.hub.ensure_translator_for(self.direction)
+        pending: "_PendingBuffer | None" = None
 
         while not self._stop_event.is_set():
             try:
-                rec = self._recognized_queue.get(timeout=0.5)
+                rec = self._recognized_queue.get(timeout=0.3)
             except queue.Empty:
+                # Khong co gi moi, nhung buffer dang cho co the da qua han -
+                # phai tu kiem tra timeout o day, khong the cho mai cau tiep theo.
+                if pending is not None and pending.is_complete:
+                    self._flush_pending(pending, translator)
+                    pending = None
                 continue
 
             if self._paused.is_set():
                 continue
 
             rec, extra_dropped = self._skip_backlog(rec, self._recognized_queue, "truoc dich")
+            total_dropped = rec.dropped + extra_dropped
 
+            # Neu doi ngon ngu nguon giua chung (che do tu nhan dien) thi khong
+            # gop chung voi buffer dang do - xuat het phan cu roi bat dau moi.
+            if pending is not None and pending.detected_lang != rec.detected_lang:
+                self._flush_pending(pending, translator)
+                pending = None
+
+            if pending is None:
+                pending = _PendingBuffer(
+                    text=rec.source_text,
+                    detected_lang=rec.detected_lang,
+                    speaker_label=rec.speaker_label,
+                    duration_s=rec.duration_s,
+                    captured_at=rec.captured_at,
+                    t_stt=rec.t_stt,
+                    dropped=total_dropped,
+                    started_at=time.monotonic(),
+                )
+            else:
+                pending.append(rec, extra_dropped)
+
+            if pending.is_complete:
+                try:
+                    self._flush_pending(pending, translator)
+                except Exception as exc:
+                    # Mot cau loi khong duoc lam chet ca pipeline - bao roi di tiep
+                    self._set_status(f"Loi khi dich: {exc}")
+                pending = None
+
+        # Dung app trong luc dang co buffer do dang - xuat not, dung de mat.
+        if pending is not None:
             try:
-                self._translate_and_speak(rec, translator, rec.dropped + extra_dropped)
-            except Exception as exc:
-                # Mot cau loi khong duoc lam chet ca pipeline - bao roi di tiep
-                self._set_status(f"Loi khi dich: {exc}")
+                self._flush_pending(pending, translator)
+            except Exception:
+                pass
+
+    def _flush_pending(self, pending: "_PendingBuffer", translator) -> None:
+        rec = _Recognized(
+            source_text=pending.text,
+            detected_lang=pending.detected_lang,
+            speaker_label=pending.speaker_label,
+            duration_s=pending.duration_s,
+            captured_at=pending.captured_at,
+            t_stt=pending.t_stt,
+            dropped=pending.dropped,
+        )
+        self._translate_and_speak(rec, translator, pending.dropped)
 
     def _translate_and_speak(self, rec: _Recognized, translator, dropped: int) -> None:
         t0 = time.monotonic()
