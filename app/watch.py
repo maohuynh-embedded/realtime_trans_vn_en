@@ -119,6 +119,8 @@ def main() -> None:
     hub = ModelHub(cfg, status_cb=lambda m: status_q.put(m))
 
     pipeline = DirectionPipeline(cfg.en2vi, cfg.audio, hub, source, output, result_q, status_q)
+    if "--tech" in args:
+        pipeline.tech_mode.set()   # bat glossary bao ve thuat ngu (xem app/mt.py)
 
     print("\nDang tai model (lan dau co the mat vai phut)...")
     pipeline.load_models()

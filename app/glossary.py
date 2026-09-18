@@ -278,12 +278,36 @@ _PLACEHOLDER_FMT = "__{}__"
 # hon han cac lua chon khac da thu (chuoi dai, so khoanh tron, ngoac vuong kep).
 
 
+# So tu TOI THIEU trong CAU GOC de con bao ve bang placeholder. Da do thuc te
+# (khong doan): cau qua ngan khong du "ngu canh that" xung quanh placeholder
+# khien NLLB mat phuong huong, sinh ra noi dung SAI HOAN TOAN thay vi chi
+# khong dich duoc thuat ngu:
+#
+#   4 tu  "The __0__ is stuck."                    -> "- Co may bi mac ket."  HONG
+#   7 tu  "The __0__ on this board is stuck."       -> giu dung placeholder    OK
+#   9 tu  "Check the __0__ on this board..."        -> giu dung placeholder    OK
+#
+# Chon dung 7 (diem du lieu THAP NHAT da xac nhan AN TOAN o tren, khong noi
+# suy them) lam nguong. Duoi nguong nay, BO QUA bao ve hoan toan - cau ngan
+# van dich duoc, chi co the sai rieng thuat ngu (rui ro CU, da biet, khong
+# nghiem trong), con hon nguy co MAT HET NOI DUNG (rui ro MOI, do chinh viec
+# bao ve gay ra). Da thu nguong 6 truoc va van HONG voi cau 6 tu that
+# ("I missed the bus this morning." -> mat het "bus"), nen khong ha thap hon 7.
+MIN_WORDS_FOR_PROTECTION = 7
+
+
 def protect_terms(text: str) -> tuple[str, list[str]]:
     """Thay cac thuat ngu biet truoc bang placeholder, tra ve (text_moi, restore_list).
 
     restore_list[i] la GIA TRI CAN THAY VAO ban dich sau nay (tu tieng Viet neu
     co, hoac nguyen van tieng Anh goc neu can giu nguyen).
+
+    Cau qua NGAN (duoi MIN_WORDS_FOR_PROTECTION tu) se KHONG duoc bao ve - xem
+    ghi chu o MIN_WORDS_FOR_PROTECTION ve ly do.
     """
+    if len(text.split()) < MIN_WORDS_FOR_PROTECTION:
+        return text, []
+
     restore: list[str] = []
 
     def _sub(match: "re.Match", table: dict) -> str:

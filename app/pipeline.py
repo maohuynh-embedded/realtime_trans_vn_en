@@ -144,6 +144,20 @@ class DirectionPipeline:
         if direction.speak:
             self.speak.set()
 
+        # CHE DO: "giao tiep binh thuong" (mac dinh, TAT) hay "chuyen nganh
+        # embedded/SW/HW" (BAT). Dieu khien ca STT (initial_prompt, dat rieng
+        # tren cfg.stt) LAN MT (glossary bao ve thuat ngu).
+        #
+        # Vi sao KHONG duoc de glossary luon bat: no bao ve nhung tu nhu "bus",
+        # "plane", "thread", "driver", "host", "frame" vi mang nghia KY THUAT
+        # khac han nghia thong thuong - nhung trong hoi thoai BINH THUONG,
+        # chinh cac tu do lai mang dung nghia thong thuong ("I missed the bus"
+        # = "toi lo xe buyt", KHONG phai duong truyen du lieu). Luon bat
+        # glossary se dich SAI theo huong nguoc lai cho hoi thoai thuong -
+        # giu nguyen "bus" tieng Anh thay vi "xe buyt". App khong tu doan duoc
+        # dang hoi thoai nao, nen bat buoc nguoi dung tu chon qua GUI/--tech.
+        self.tech_mode = threading.Event()
+
         # Dang phat ban dich -> tam ngung thu, de KHONG bat lai chinh giong minh
         # vua doc ra. Nho co nay ma may chi co 1 loa duy nhat van dung duoc:
         # loa vua phat tieng Viet vua la nguon bi loopback bat, nhung trong luc
@@ -440,10 +454,10 @@ class DirectionPipeline:
             self._set_status(f"Dang dich {rec.detected_lang} -> {self.direction.tgt_language}...")
             translated = self.hub.ensure_translator(
                 rec.detected_lang, self.direction.tgt_language
-            ).translate(rec.source_text)
+            ).translate(rec.source_text, use_glossary=self.tech_mode.is_set())
         else:
             self._set_status("Dang dich...")
-            translated = translator.translate(rec.source_text)
+            translated = translator.translate(rec.source_text, use_glossary=self.tech_mode.is_set())
         t_mt = time.monotonic() - t0
 
         t_tts = 0.0

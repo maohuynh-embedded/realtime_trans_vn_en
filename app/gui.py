@@ -95,6 +95,31 @@ class DirectionPanel(ttk.LabelFrame):
                 foreground="#888",
             ).pack(side=tk.LEFT, padx=6)
 
+        # CHE DO: hien RIENG mot hang, dung radio button (khong phai checkbox)
+        # de tach bach RO RANG 2 che do, tranh nham lan. Anh huong CA HAI:
+        #   - STT: Whisper duoc/khong duoc nhet initial_prompt thuat ngu.
+        #   - MT : glossary co bao ve thuat ngu khoi bi dich sai hay khong.
+        #
+        # Vi sao PHAI tach mode ro rang, khong the luon bat glossary: glossary
+        # bao ve nhung tu nhu "bus", "plane", "thread", "driver" vi CHUNG MANG
+        # NGHIA KY THUAT khac han nghia thong thuong - nhung trong hoi thoai
+        # BINH THUONG, chinh cac tu do lai dung dung nghia thong thuong ("I
+        # missed the bus" = "toi lo xe buyt"). Neu luon bat, cau nay se GIU
+        # NGUYEN "bus" tieng Anh thay vi dich dung - sai theo chieu nguoc lai.
+        # App khong tu doan duoc dang hoi thoai, bat buoc nguoi dung tu chon.
+        mode_row = ttk.Frame(self)
+        mode_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Label(mode_row, text="Che do:").pack(side=tk.LEFT)
+        self.tech_var = tk.BooleanVar(value=False)
+        ttk.Radiobutton(
+            mode_row, text="Giao tiep binh thuong", variable=self.tech_var,
+            value=False, command=self._on_tech_toggle,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Radiobutton(
+            mode_row, text="Chuyen nganh embedded/software/hardware",
+            variable=self.tech_var, value=True, command=self._on_tech_toggle,
+        ).pack(side=tk.LEFT, padx=(10, 0))
+
         ctrl = ttk.Frame(self)
         ctrl.pack(fill=tk.X, pady=(4, 2))
         self.toggle_btn = ttk.Button(ctrl, text="Bat", width=10, command=self._on_toggle)
@@ -111,19 +136,6 @@ class DirectionPanel(ttk.LabelFrame):
         self.speak_var = tk.BooleanVar(value=direction.speak)
         ttk.Checkbutton(
             ctrl, text="Doc thanh tieng", variable=self.speak_var, command=self._on_speak_toggle
-        ).pack(side=tk.LEFT, padx=6)
-
-        # Chuyen nganh embedded/software/hardware: nhet tu vung ky thuat vao
-        # Whisper (nghe dung UART/GPIO/bus... hon) + bao ve thuat ngu khoi bi
-        # NLLB dich sai (xem app/glossary.py - vd "I2C bus" tung bi dich thanh
-        # "xe buyt I2C", "ground plane" thanh "may bay mat dat"). Phan bao ve
-        # thuat ngu LUON BAT (an toan, khong lam gi khi khong co thuat ngu);
-        # checkbox nay chi bat/tat PHAN NGHE (initial_prompt) vi no CO THE lam
-        # lech nhe cach Whisper nghe noi dung khong lien quan ky thuat.
-        self.tech_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            ctrl, text="Chuyen nganh embedded/SW/HW", variable=self.tech_var,
-            command=self._on_tech_toggle,
         ).pack(side=tk.LEFT, padx=6)
 
         self.lag_var = tk.StringVar(value="")
@@ -276,6 +288,8 @@ class DirectionPanel(ttk.LabelFrame):
             self.direction, self.app.cfg.audio, self.app.hub, source, output,
             result_queue=self.app.result_queue, status_queue=self.app.status_queue,
         )
+        if self.tech_var.get():   # giu dung che do da chon TRUOC khi bam Bat
+            self.pipeline.tech_mode.set()
         self.app.apply_latency_settings(self.pipeline)
 
         self.toggle_btn.config(state="disabled")
@@ -378,26 +392,35 @@ class DirectionPanel(ttk.LabelFrame):
         self.app.check_warnings()
 
     def _on_tech_toggle(self) -> None:
-        """Bat/tat initial_prompt chuyen nganh cho Whisper.
+        """Doi che do "giao tiep binh thuong" <-> "chuyen nganh".
 
-        CHI CO 1 Whisper dung chung ca 2 chieu (xem app/models.py: ensure_stt()
-        la singleton), nen cai nay la CAI DAT CHUNG - khong rieng cho tung
-        khung. Dong bo lai checkbox o khung kia de UI khong hien trang thai
-        mau thuan. Thay doi co hieu luc NGAY tu cau tiep theo, khong can Tat/
-        Bat lai (SpeechToText.transcribe_pcm16 doc self.cfg.initial_prompt
-        MOI LAN goi, khong cache).
+        Anh huong CA HAI:
+          - STT: cfg.stt.initial_prompt (CHI CO 1 Whisper dung chung ca 2
+            chieu - xem app/models.py ensure_stt() la singleton - nen day la
+            CAI DAT CHUNG, dong bo sang khung kia de UI khong hien trang thai
+            mau thuan). Co hieu luc NGAY tu cau tiep theo (doc song, khong cache).
+          - MT: pipeline.tech_mode cua RIENG khung nay (moi khung dich mot
+            chieu khac nhau nen KHONG dong bo giua 2 khung - khung dang dich
+            hoi thoai binh thuong khong nen tu nhien bi bat glossary theo
+            khung kia). Cung co hieu luc ngay neu dang chay.
         """
         from app.config import DOMAIN_PROMPTS
 
         on = self.tech_var.get()
         self.app.cfg.stt.initial_prompt = DOMAIN_PROMPTS["embedded_sw_hw"] if on else ""
 
+        if self.pipeline is not None:
+            if on:
+                self.pipeline.tech_mode.set()
+            else:
+                self.pipeline.tech_mode.clear()
+
         for panel in self.app.panels.values():
             if panel is not self and panel.tech_var.get() != on:
                 panel.tech_var.set(on)
 
         self.status_var.set(
-            "Da bat che do chuyen nganh embedded/SW/HW." if on else "Da tat che do chuyen nganh."
+            "Da bat che do chuyen nganh embedded/SW/HW." if on else "Da chuyen ve giao tiep binh thuong."
         )
 
     def _on_pause(self) -> None:

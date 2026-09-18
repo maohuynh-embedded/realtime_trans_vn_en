@@ -149,13 +149,29 @@ class Translator:
         return local_model_path("nllb-600m-ct2")
 
     @torch.inference_mode()
-    def translate(self, text: str) -> str:
-        """Bao ve thuat ngu chuyen nganh (glossary) TRUOC khi goi model, phuc
-        hoi lai SAU khi dich xong - ap dung chung cho ca 2 backend (CTranslate2
-        va transformers) o day, tranh trung lap logic. Xem app/glossary.py de
-        biet ly do va cac loi thuc te da do duoc (vd. NLLB dich "I2C bus"
-        thanh "xe buyt I2C", "ground plane" thanh "may bay mat dat").
+    def translate(self, text: str, use_glossary: bool = True) -> str:
+        """Dich 1 cau. use_glossary bat/tat bao ve thuat ngu chuyen nganh.
+
+        QUAN TRONG - vi sao co tham so nay (khong phai luon bat): glossary bao
+        ve nhung tu NHU "bus", "plane", "thread", "driver", "host", "frame"...
+        vi chung MANG NGHIA KY THUAT khac han nghia thong thuong. Nhung trong
+        hoi thoai BINH THUONG, chinh cac tu do lai MANG NGHIA THONG THUONG that
+        su ("I missed the bus" = "toi lo xe buyt", KHONG phai duong truyen du
+        lieu). Neu luon bat glossary, cau nay se bi giu nguyen "bus" tieng Anh
+        thay vi dich dung "xe buyt" - HAI HUONG dich sai nam doi xung nhau, chi
+        khac boi NGU CANH (ky thuat hay khong). App khong tu doan duoc ngu
+        canh, nen de NGUOI DUNG chon qua "che do" tren GUI (--tech / checkbox)
+        - xem DirectionPipeline.tech_mode.
+
+        Mac dinh True de TUONG THICH NGUOC voi cac cong cu goi truc tiep (vd.
+        app/glossary_tool.py, app/diagnose.py) dang mong doi glossary hoat
+        dong khi kiem tra. DirectionPipeline (pipeline that su nguoi dung
+        dung) LUON truyen use_glossary=self.tech_mode.is_set() tuong minh,
+        mac dinh TAT cho den khi nguoi dung chon che do chuyen nganh.
         """
+        if not use_glossary:
+            return self._translate_raw(text)
+
         protected, restore = protect_terms(text)
         result = self._translate_raw(protected)
         return restore_terms(result, restore)

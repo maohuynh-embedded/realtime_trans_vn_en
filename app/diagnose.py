@@ -173,7 +173,10 @@ def main() -> None:
         if text_en and lang != cfg.en2vi.tgt_language:
             tr = (hub.ensure_translator(lang, cfg.en2vi.tgt_language)
                   if cfg.en2vi.stt_language == "auto" else translator)
-            text_vi = tr.translate(text_en)
+            # Dong bo voi co --tech: khong bat glossary "am tham" khi nguoi
+            # dung dang chan doan hoi thoai BINH THUONG (xem app/mt.py de biet
+            # ly do glossary co the dich SAI cho hoi thoai thuong).
+            text_vi = tr.translate(text_en, use_glossary="--tech" in sys.argv[1:])
         else:
             text_vi = "(khong can dich)" if text_en else ""
         t_mt = time.time() - t0
