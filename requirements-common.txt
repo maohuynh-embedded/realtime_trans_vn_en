@@ -1,0 +1,16 @@
+# Thu vien DUNG CHUNG cho moi nen tang (Python 3.10-3.12, 64-bit).
+# Cai qua file cua tung nen tang:
+#   Windows: windows/requirements.txt      macOS: macos/requirements.txt
+
+sounddevice        # mic + phat ra thiet bi that (PortAudio: WASAPI tren Windows, CoreAudio tren macOS)
+numpy
+scipy              # resampling 48kHz -> 16kHz
+webrtcvad-wheels   # VAD, co wheel dung san cho Windows va macOS arm64 (import name: webrtcvad)
+faster-whisper     # CTranslate2 Whisper: CUDA float16 / CPU int8
+ctranslate2        # NLLB (dich) chay CTranslate2
+transformers       # tokenizer NLLB / MarianMT
+sentencepiece      # tokenizer can cho NLLB / MarianMT
+sacremoses         # tokenizer helper cho MarianMT
+torch              # xem ghi chu GPU trong windows/requirements.txt va macos/requirements.txt
+piper-tts          # giong doc tieng Viet / tieng Anh
+speechbrain        # nhan dien nguoi noi (ECAPA-TDNN)

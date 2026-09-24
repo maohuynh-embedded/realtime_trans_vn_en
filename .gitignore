@@ -33,3 +33,5 @@ reference.wav
 Thumbs.db
 desktop.ini
 dist/
+.DS_Store
+.build/

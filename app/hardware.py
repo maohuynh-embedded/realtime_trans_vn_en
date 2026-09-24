@@ -1,12 +1,17 @@
 """Tu do phan cung va chon cau hinh phu hop.
 
-App duoc dung tren 2 may khac han nhau:
-  - May nha : i5-13400F + RTX 2060 6GB + 32GB RAM  -> chay GPU, model to, co the clone giong.
-  - May cty : i7-1270P, khong GPU roi, khong quyen admin -> chay CPU, model nho.
-
-Thay vi sua config moi lan doi may, module nay tu nhan dien roi chon giup.
+Phan cung tang toc do tung nen tang khai bao (windows/hardware.py,
+macos/hardware.py); app/accel.py quyet dinh moi giai doan chay tren cai nao.
+Cung mot bo ma vi vay chay toi uu tren:
+  - Windows co GPU NVIDIA      -> CUDA float16, model lon
+  - Windows chi co CPU          -> CPU int8, model nho
+  - macOS Apple Silicon         -> GPU Apple (MLX), model lon
 """
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
+
+from app.accel import APPLE_GPU, CUDA, Accelerator, ExecutionPlan, choose_plan
+from app.platform_impl import hardware as _platform
 
 
 @dataclass
@@ -22,56 +27,54 @@ class HardwareProfile:
     stt_model_size: str
     can_clone_voice: bool
 
+    stt_backend: str = "faster-whisper"
+    mt_device: str = "cpu"
+    speaker_device: str = "cpu"
+    ram_gb: float = 0.0
+    accelerators: list[Accelerator] = field(default_factory=list)
+
+    @property
+    def has_gpu(self) -> bool:
+        """Co GPU dung duoc cho STT (NVIDIA hoac Apple) - quyet dinh danh sach model to."""
+        return self.stt_device in ("cuda", "gpu")
+
     def summary(self) -> str:
-        if self.has_cuda:
-            return (f"GPU {self.gpu_name} ({self.vram_gb:.0f}GB) -> Whisper '{self.stt_model_size}' "
-                    f"chay GPU ({self.stt_compute_type})")
-        return (f"Khong co GPU, {self.cpu_threads} luong CPU -> Whisper '{self.stt_model_size}' "
-                f"chay CPU ({self.stt_compute_type})")
+        gpu = f"{self.gpu_name} ({self.vram_gb:.0f}GB)" if self.gpu_name else "khong co GPU"
+        return (f"{gpu}, {self.cpu_threads} luong CPU -> Whisper '{self.stt_model_size}' "
+                f"[{self.stt_backend}] chay {self.stt_device} ({self.stt_compute_type})")
 
 
 def detect() -> HardwareProfile:
     """Nhan dien phan cung hien tai va de xuat cau hinh."""
-    import os
-
     cpu_threads = os.cpu_count() or 4
-    has_cuda, gpu_name, vram_gb = False, "", 0.0
+    accels = _platform.detect_accelerators()
+    ram_gb = _platform.total_ram_gb()
+    plan: ExecutionPlan = choose_plan(accels, ram_gb, cpu_threads)
 
-    try:
-        import torch
-        if torch.cuda.is_available():
-            has_cuda = True
-            gpu_name = torch.cuda.get_device_name(0)
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
-    except Exception:
-        pass
-
-    if has_cuda:
-        # GPU: float16 nhanh hon nhieu va VRAM du. Chon co model theo VRAM.
-        if vram_gb >= 9:
-            model = "large-v3"
-        elif vram_gb >= 5:
-            model = "medium"      # RTX 2060 6GB thoai mai voi medium
-        else:
-            model = "small"
-        return HardwareProfile(
-            has_cuda=True, gpu_name=gpu_name, vram_gb=vram_gb, cpu_threads=cpu_threads,
-            stt_device="cuda", stt_compute_type="float16", stt_model_size=model,
-            can_clone_voice=vram_gb >= 5,   # XTTS can ~4GB VRAM
-        )
-
-    # CPU-only (may cong ty): int8 de giam tre, model nho
-    model = "small" if cpu_threads >= 8 else "base"
+    cuda = next((a for a in accels if a.kind == CUDA and a.usable), None)
+    apple = next((a for a in accels if a.kind == APPLE_GPU and a.usable), None)
+    gpu = cuda or apple
     return HardwareProfile(
-        has_cuda=False, gpu_name="", vram_gb=0.0, cpu_threads=cpu_threads,
-        stt_device="cpu", stt_compute_type="int8", stt_model_size=model,
-        can_clone_voice=False,   # clone giong tren CPU qua cham, khong dung real-time duoc
+        has_cuda=cuda is not None,
+        gpu_name=gpu.name if gpu else "",
+        vram_gb=gpu.memory_gb if gpu else 0.0,
+        cpu_threads=cpu_threads,
+        stt_device=plan.stt.device,
+        stt_compute_type=plan.stt.compute_type,
+        stt_model_size=plan.stt_model_size,
+        can_clone_voice=plan.can_clone_voice,
+        stt_backend=plan.stt.backend,
+        mt_device=plan.mt_device,
+        speaker_device=plan.speaker_device,
+        ram_gb=ram_gb,
+        accelerators=accels,
     )
 
 
 def apply_to(cfg) -> HardwareProfile:
     """Ap cau hinh phan cung vao AppConfig."""
     hw = detect()
+    cfg.stt.backend = hw.stt_backend
     cfg.stt.device = hw.stt_device
     cfg.stt.compute_type = hw.stt_compute_type
     cfg.stt.model_size = hw.stt_model_size
@@ -83,4 +86,7 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     hw = detect()
     print(hw.summary())
+    for a in hw.accelerators:
+        state = "san sang" if a.usable else f"chua dung ({a.note})"
+        print(f"  - {a.kind}: {a.name} {a.memory_gb:.0f}GB [{state}]")
     print(f"  Clone giong duoc: {'CO' if hw.can_clone_voice else 'KHONG (can GPU >= 5GB VRAM)'}")
