@@ -42,6 +42,7 @@ class SttConfig:
     Ngon ngu KHONG nam o day ma nam trong DirectionConfig, vi moi chieu
     nghe mot thu tieng khac nhau.
     """
+    backend: str = "faster-whisper"  # "faster-whisper" (CUDA/CPU) | "mlx" (GPU Apple) - xem app/accel.py
     model_size: str = "small"      # "base" neu can nhanh hon, "medium" neu can chinh xac hon
     device: str = "cpu"
     compute_type: str = "int8"

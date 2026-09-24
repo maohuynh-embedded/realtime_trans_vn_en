@@ -1,74 +1,48 @@
-"""Liet ke va chon thiet bi audio.
+"""Liet ke va chon thiet bi audio - phan DUNG CHUNG cho moi nen tang.
 
-- Input mac dinh: WASAPI loopback device tuong ung voi thiet bi PHAT mac dinh
-  (bat am thanh cuoc hop dang phat ra loa/tai nghe), dung PyAudioWPatch.
-  Khong can VB-CABLE, khong can driver, khong can quyen admin.
-- Output mac dinh: thiet bi phat that (tai nghe) de phat ban dich, dung sounddevice.
+- Mic va thiet bi phat: sounddevice (PortAudio) chay tren ca Windows lan macOS.
+- Nguon 'am thanh he thong dang phat ra' (loopback) la phan phu thuoc he dieu
+  hanh: nam trong windows/audio.py (WASAPI) va macos/audio.py (Core Audio tap),
+  duoc chon boi app/platform_impl.py.
 """
-from dataclasses import dataclass
-from typing import Optional
-
-import pyaudiowpatch as pyaudio
 import sounddevice as sd
 
+from app.audio_types import InputDevice, LoopbackDevice, OutputDevice
+from app.platform_impl import audio as _platform
 
-@dataclass
-class LoopbackDevice:
-    index: int
-    name: str
-    sample_rate: int
-    channels: int
+__all__ = [
+    "InputDevice", "LoopbackDevice", "OutputDevice",
+    "list_loopback_devices", "get_default_loopback_device", "is_same_physical_device",
+    "list_input_devices", "get_default_input_device",
+    "list_output_devices", "get_default_output_device", "is_output_usable",
+    "suggest_output_device", "suggest_output_for_virtual_mic", "print_devices",
+]
 
-
-def list_loopback_devices() -> list[LoopbackDevice]:
-    """Tra ve danh sach cac WASAPI loopback device hien co."""
-    devices = []
-    with pyaudio.PyAudio() as p:
-        for dev in p.get_loopback_device_info_generator():
-            devices.append(
-                LoopbackDevice(
-                    index=dev["index"],
-                    name=dev["name"],
-                    sample_rate=int(dev["defaultSampleRate"]),
-                    channels=int(dev["maxInputChannels"]),
-                )
-            )
-    return devices
+# ---- Loopback: uy quyen cho nen tang ----
+list_loopback_devices = _platform.list_loopback_devices
+get_default_loopback_device = _platform.get_default_loopback_device
+is_same_physical_device = _platform.is_same_physical_device
 
 
-def get_default_loopback_device() -> LoopbackDevice:
-    """Loopback device tuong ung voi thiet bi PHAT mac dinh cua Windows.
-
-    Day la input ma pipeline se dung de bat am thanh cuoc hop.
-    """
-    with pyaudio.PyAudio() as p:
-        default_speakers = p.get_default_wasapi_loopback()
-        return LoopbackDevice(
-            index=default_speakers["index"],
-            name=default_speakers["name"],
-            sample_rate=int(default_speakers["defaultSampleRate"]),
-            channels=int(default_speakers["maxInputChannels"]),
-        )
+def _is_generic_alias(name: str) -> bool:
+    return any(alias in name.lower() for alias in _platform.GENERIC_ALIASES)
 
 
-@dataclass
-class InputDevice:
-    """Mic that (khong phai loopback) - nguon cho chieu Viet -> Anh."""
-    index: int
-    name: str
-    sample_rate: int
-    channels: int
+def _host_api_ok(host_api: str) -> bool:
+    return any(allowed.lower() in host_api.lower() for allowed in _platform.HOST_APIS)
 
+
+# ---- Mic ----
 
 def list_input_devices() -> list[InputDevice]:
-    """Danh sach mic that, bo qua cac endpoint Bluetooth hands-free 8kHz (chat luong qua thap)."""
+    """Danh sach mic that, bo qua cac endpoint khong dung duoc/khong on dinh."""
     devices = []
     for idx, dev in enumerate(sd.query_devices()):
         if dev["max_input_channels"] <= 0:
             continue
         host_api = sd.query_hostapis(dev["hostapi"])["name"]
-        if "WASAPI" not in host_api and "DirectSound" not in host_api:
-            continue  # bo MME/WDM-KS cho gon, 2 host API nay du dung va on dinh nhat
+        if not _host_api_ok(host_api):
+            continue
         if _is_generic_alias(dev["name"]):
             continue
         devices.append(
@@ -97,33 +71,12 @@ def get_default_input_device() -> InputDevice:
     raise RuntimeError("Khong tim thay mic nao.")
 
 
-@dataclass
-class OutputDevice:
-    index: int
-    name: str
-    sample_rate: int
-    channels: int = 2
-    host_api: str = ""
-
-
-# Cac "thiet bi" ao do Windows tao ra, tro toi thiet bi mac dinh chu khong phai
-# phan cung that - chon chung se gay nham lan (vd. phat ra dung cho thiet bi dang
-# bi loopback bat ma khong biet).
-_GENERIC_ALIASES = (
-    "primary sound driver",
-    "primary sound capture driver",
-    "microsoft sound mapper",
-)
-
-
-def _is_generic_alias(name: str) -> bool:
-    return any(alias in name.lower() for alias in _GENERIC_ALIASES)
-
+# ---- Thiet bi phat ----
 
 def is_output_usable(index: int) -> bool:
     """Thu mo that su thiet bi phat.
 
-    Windows liet ke ca nhung endpoint KHONG co thiet bi cam vao (vd. jack tai nghe
+    Nhieu endpoint duoc liet ke nhung KHONG co thiet bi cam vao (vd. jack tai nghe
     dang trong) - mo ra se bao 'Invalid device'. Phai thu mo moi biet chac.
     """
     try:
@@ -140,17 +93,13 @@ def is_output_usable(index: int) -> bool:
 
 
 def list_output_devices(usable_only: bool = True) -> list[OutputDevice]:
-    """Danh sach thiet bi phat - day la noi phat ban dich ra.
-
-    Bo cac host API khong dung de phat duoc on dinh (WDM-KS thuong la endpoint
-    phan cung tho, hay bao 'Invalid device' khi jack dang trong).
-    """
+    """Danh sach thiet bi phat - day la noi phat ban dich ra."""
     devices = []
     for idx, dev in enumerate(sd.query_devices()):
         if dev["max_output_channels"] <= 0:
             continue
         host_api = sd.query_hostapis(dev["hostapi"])["name"]
-        if "WASAPI" not in host_api and "DirectSound" not in host_api:
+        if not _host_api_ok(host_api):
             continue
         if _is_generic_alias(dev["name"]):
             continue
@@ -172,7 +121,7 @@ def list_output_devices(usable_only: bool = True) -> list[OutputDevice]:
 
 
 def get_default_output_device(name_hint: str = "") -> OutputDevice:
-    """Chon output device. Neu co name_hint thi tim theo ten, khong thi dung default cua he thong."""
+    """Chon output device. Co name_hint thi tim theo ten, khong thi dung default cua he thong."""
     outputs = list_output_devices()
     if name_hint:
         for dev in outputs:
@@ -187,23 +136,11 @@ def get_default_output_device(name_hint: str = "") -> OutputDevice:
     raise RuntimeError("Khong tim thay thiet bi output nao.")
 
 
-def _normalize_device_name(name: str) -> str:
-    return name.replace("[Loopback]", "").strip().lower()
-
-
-def is_same_physical_device(loopback: LoopbackDevice, output: OutputDevice) -> bool:
-    """True neu output device chinh la thiet bi dang bi loopback bat.
-
-    Neu trung nhau se sinh vong lap: ban dich phat ra loa -> loopback bat lai ->
-    dich tiep (xem muc 8 cua HUONG_DAN_XAY_DUNG.md). Phai canh bao nguoi dung.
-    """
-    return _normalize_device_name(loopback.name) == _normalize_device_name(output.name)
-
-
 def _card_name(name: str) -> str:
     """Lay ten CARD tu ten endpoint, vd 'Speakers (Realtek(R) Audio)' -> 'realtek(r) audio'.
 
     Dung de phan biet 'card khac han' voi 'endpoint khac cua cung 1 card'.
+    Ten khong co ngoac (vd. 'BlackHole 2ch') thi giu nguyen ca ten.
     """
     inner = name.replace("[Loopback]", "").strip()
     if "(" in inner and ")" in inner:
@@ -212,14 +149,18 @@ def _card_name(name: str) -> str:
 
 
 def suggest_output_device(loopback: LoopbackDevice) -> OutputDevice:
-    """Chon noi phat ban dich, KHAC thiet bi dang bi loopback bat (tranh vong lap).
+    """Chon noi phat ban dich, tranh vong lap voi thiet bi dang bi loopback bat.
 
-    Uu tien theo thu tu:
-      1. Card VAT LY khac han (vd. dang loopback Realtek -> phat ra Maonocaster).
-         Endpoint khac cua cung 1 card van co the bi Stereo Mix/loopback bat lai.
+    Nen tang tu bao ve khoi vong lap (macOS loai tru tien trinh cua app khoi tap)
+    thi dung luon thiet bi mac dinh cua he thong. Nguoc lai (Windows), uu tien
+    theo thu tu:
+      1. Card VAT LY khac han thiet bi dang loopback.
       2. Ten co ve tai nghe.
-    Chi xet cac thiet bi THUC SU mo duoc (da loc trong list_output_devices).
+    Chi xet cac thiet bi THUC SU mo duoc.
     """
+    if _platform.PREFER_DEFAULT_OUTPUT:
+        return get_default_output_device()
+
     outputs = list_output_devices()
     candidates = [d for d in outputs if not is_same_physical_device(loopback, d)]
     if not candidates:
@@ -234,6 +175,28 @@ def suggest_output_device(loopback: LoopbackDevice) -> OutputDevice:
             if keyword in dev.name.lower():
                 return dev
     return pool[0]
+
+
+def suggest_output_for_virtual_mic(virtual_mic) -> "OutputDevice | None":
+    """Chon thiet bi PHAT sao cho mic ao dang chon nghe duoc no.
+
+    Windows: 'Stereo Mix' chi bat am thanh cua CHINH CARD no thuoc ve. macOS: mic ao
+    kieu BlackHole co dau vao va dau ra cung ten. Ca hai truong hop deu ghep theo ten card.
+
+    Tra ve None neu khong tim duoc output cung card.
+    """
+    mic_card = _card_name(virtual_mic.name)
+    outputs = list_output_devices()
+
+    same_card = [d for d in outputs if _card_name(d.name) == mic_card]
+    if not same_card:
+        return None
+
+    # Uu tien "Speakers" hon "Digital Output" (SPDIF thuong khong ra Stereo Mix)
+    for dev in same_card:
+        if "speaker" in dev.name.lower():
+            return dev
+    return same_card[0]
 
 
 def print_devices() -> None:
@@ -262,27 +225,3 @@ def print_devices() -> None:
 
 if __name__ == "__main__":
     print_devices()
-
-
-def suggest_output_for_virtual_mic(virtual_mic) -> "OutputDevice | None":
-    """Chon thiet bi PHAT sao cho mic ao dang chon nghe duoc no.
-
-    Mic ao kieu "Stereo Mix" chi bat am thanh cua CHINH CARD no thuoc ve:
-    Stereo Mix (Realtek) chi nghe duoc tieng phat ra Speakers (Realtek), khong
-    nghe duoc tieng phat ra Maonocaster. Chon nham cap la khong co tin hieu nao
-    di qua, du ca hai thiet bi deu hoat dong binh thuong.
-
-    Tra ve None neu khong tim duoc output cung card.
-    """
-    mic_card = _card_name(virtual_mic.name)
-    outputs = list_output_devices()
-
-    same_card = [d for d in outputs if _card_name(d.name) == mic_card]
-    if not same_card:
-        return None
-
-    # Uu tien "Speakers" hon "Digital Output" (SPDIF thuong khong ra Stereo Mix)
-    for dev in same_card:
-        if "speaker" in dev.name.lower():
-            return dev
-    return same_card[0]

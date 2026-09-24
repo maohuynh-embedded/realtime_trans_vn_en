@@ -25,7 +25,7 @@ class ModelHub:
 
     def ensure_stt(self) -> SpeechToText:
         if self.stt is None:
-            self._status("Dang tai model STT (faster-whisper)...")
+            self._status(f"Dang tai model STT ({self.cfg.stt.backend}, {self.cfg.stt.model_size})...")
             self.stt = SpeechToText(self.cfg.stt)
         return self.stt
 

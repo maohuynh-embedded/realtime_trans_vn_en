@@ -54,7 +54,7 @@ def main() -> None:
     print("=" * 72)
     print(f"Phan cung : {hw.summary()}")
 
-    if hw.has_cuda:
+    if hw.has_gpu:
         _warn_gpu_contention()
     print(f"STT       : Whisper '{cfg.stt.model_size}' / {cfg.stt.device} / {cfg.stt.compute_type}")
     print(f"Nghe tieng: {cfg.en2vi.stt_language} -> dich sang {cfg.en2vi.tgt_language}")
@@ -211,8 +211,8 @@ def main() -> None:
         print(f"  Tang end_ring_ms (hien {cfg.audio.end_ring_ms}ms) len 900-1000ms trong app/config.py")
     if peak_level < 0.02:
         print("! Am luong qua nho -> Whisper nghe sai nhieu. Tang volume len.")
-    if not hw.has_cuda:
-        print("! Dang chay CPU. Neu may co GPU NVIDIA thi cai torch CUDA de dung model 'medium'.")
+    if not hw.has_gpu:
+        print("! Dang chay CPU. Neu may co GPU (NVIDIA: cai torch CUDA; Mac: cai mlx-whisper) thi dung model 'medium'.")
     if cfg.stt.model_size in ("tiny", "base"):
         print(f"! Dang dung model '{cfg.stt.model_size}' (nho, de nghe sai).")
         print("  Doi sang 'medium' hoac 'large-v3' trong app/config.py de chinh xac hon.")

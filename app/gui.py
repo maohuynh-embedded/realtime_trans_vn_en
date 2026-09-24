@@ -33,7 +33,8 @@ from app.pipeline import DirectionPipeline
 POLL_MS = 150
 
 MODEL_CHOICES_GPU = [
-    ("medium - chinh xac nhat (~0.4s)", "medium"),
+    ("large-v3-turbo - chinh xac + nhanh (~0.6s)", "large-v3-turbo"),
+    ("medium - chinh xac (~0.4-0.5s)", "medium"),
     ("small  - nhanh hon (~0.2s)", "small"),
     ("base   - nhanh nhat", "base"),
     ("large-v3 - tot nhat (can VRAM lon)", "large-v3"),
@@ -541,7 +542,7 @@ class App(tk.Tk):
 
         ttk.Label(box, text="Model nhan dang:").grid(row=0, column=0, sticky="w")
         # Danh sach va mac dinh phu thuoc phan cung da do duoc
-        self.model_choices = MODEL_CHOICES_GPU if self.hw.has_cuda else MODEL_CHOICES_CPU
+        self.model_choices = MODEL_CHOICES_GPU if self.hw.has_gpu else MODEL_CHOICES_CPU
         self.model_combo = ttk.Combobox(
             box, state="readonly", width=30, values=[c[0] for c in self.model_choices]
         )

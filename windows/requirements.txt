@@ -1,0 +1,13 @@
+# Windows 10/11, Python 3.10-3.12 (64-bit)
+-r ../requirements-common.txt
+
+PyAudioWPatch      # WASAPI loopback capture (khong can VB-CABLE / driver / admin)
+
+# --- May CO GPU NVIDIA (vd. RTX 2060): cai them de chay Whisper tren GPU ---
+# Nhanh hon ~4x VA chinh xac hon (dung duoc model 'medium' thay vi 'small'):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126 --force-reinstall
+#   pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+# App tu do phan cung (app/hardware.py) nen KHONG can sua config khi doi may.
+
+# --- May CO Intel NPU (Core Ultra) - TUY CHON, chua bat tu dong ---
+#   pip install openvino openvino-genai optimum[openvino]

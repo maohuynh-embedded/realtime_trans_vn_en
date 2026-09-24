@@ -200,7 +200,8 @@ class DirectionPipeline:
 
         self._stop_event.clear()
         if self.direction.source == "loopback":
-            self._capture = LoopbackCapture(device=self.source_device, out_queue=self._raw_queue)
+            self._capture = LoopbackCapture(device=self.source_device, out_queue=self._raw_queue,
+                                            status_cb=self._set_status)
         else:
             self._capture = MicCapture(device=self.source_device, out_queue=self._raw_queue)
         self._capture.start()

@@ -1,0 +1,6 @@
+# macOS 13+ tren Apple Silicon, Python 3.10-3.12 (arm64)
+# Dung Python cua Homebrew (python3.12); Python 3.14 qua moi, mot so goi chua co wheel.
+-r ../requirements-common.txt
+
+mlx-whisper        # Whisper chay tren GPU Apple (Metal) - nhanh hon CPU ~5x
+# ffmpeg (brew install ffmpeg) can cho mlx-whisper doc file audio; app khong can khi dua mang numpy vao.
