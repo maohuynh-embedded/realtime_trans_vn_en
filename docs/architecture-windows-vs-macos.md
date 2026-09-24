@@ -1,7 +1,7 @@
 # Kiến trúc Windows vs macOS
 
 Tài liệu so sánh kiến trúc **hiện tại trên Windows** (đã đọc từ code) với kiến trúc
-**đề xuất cho macOS** (chưa hiện thực, cần spike xác nhận). Mục đích: thấy rõ phần
+**macOS** (đang hiện thực trên nhánh `macos`, số đo lấy từ spike thật). Mục đích: thấy rõ phần
 nào dùng chung, phần nào phải viết lại, từ đó chọn hướng phát triển.
 
 Phạm vi: nhánh `macos`. Máy đích: Apple Silicon (đã kiểm tra trên M2 Pro, 32GB, macOS 26).
@@ -31,7 +31,7 @@ flowchart LR
 - Chống vòng lặp: tự tắt thu khi đang đọc, và chọn output khác card với thiết bị đang loopback.
 - Chiều Việt→Anh đi vào Zoom qua **Stereo Mix**, chỉ nghe được chính card của nó.
 
-## 2. macOS (đề xuất)
+## 2. macOS
 
 ```mermaid
 flowchart LR
@@ -43,8 +43,8 @@ flowchart LR
   end
   TAP -- pipe PCM float32 --> CAP
   MIC --> CAP
-  CAP[capture_mac.py<br/>đọc pipe -> raw_queue] --> VAD[VAD thread<br/>giữ nguyên]
-  VAD --> STT[STT thread<br/>ECAPA + backend theo nền tảng<br/>MLX / whisper.cpp / faster-whisper CPU]
+  CAP[macos/audio.py LoopbackCapture<br/>đọc pipe -> raw_queue] --> VAD[VAD thread<br/>giữ nguyên]
+  VAD --> STT[STT thread<br/>ECAPA + backend theo nền tảng<br/>MLX (GPU Apple) / faster-whisper CPU]
   STT --> MT[MT + TTS thread<br/>NLLB CT2 CPU int8 + Piper<br/>giữ nguyên]
   MT --> PLAY[playback.py<br/>sounddevice -> CoreAudio]
   MT --> GUI[GUI<br/>Giai đoạn 1: Tkinter<br/>Giai đoạn 2: SwiftUI menu bar + phụ đề nổi]
@@ -76,24 +76,65 @@ Khác biệt kiến trúc quan trọng: **lớp bắt âm thanh chuyển ra ngo�
 | Cài đặt / chạy | `CHAY_APP.bat`, `setup_env.py` | `setup_mac.sh`, `.command` | **Viết mới** |
 | Quyền hệ thống | Không cần admin | Quyền ghi âm thanh hệ thống (TCC), quyền mic | Mới |
 
-## 4. Phần dùng chung và phần tách theo nền tảng
+## 4. Cấu trúc thư mục và các ranh giới
+
+Mô hình **adapter**: `app/` là lõi dùng chung, `windows/` và `macos/` ngang hàng, mỗi
+bên cung cấp cùng một bộ module. Lõi không bao giờ import trực tiếp một nền tảng, chỉ đi
+qua `app/platform_impl.py`.
 
 ```
-app/
-  core/ (dùng chung)     pipeline, vad_segmenter, hallucination, glossary,
-                         mt, tts, speaker, resample, config
-  platform/
-    windows/             capture (WASAPI), audio_devices, cuda_setup
-    macos/               capture (đọc pipe từ helper), audio_devices
-  stt backends/          faster_whisper | mlx_whisper | whisper_cpp
-macos/
-  sysaudio-capture/      Swift package: Core Audio tap CLI
-  (giai đoạn 2) App/     SwiftUI menu bar + phụ đề nổi
+main.py, setup_env.py, requirements-common.txt
+app/                      lõi dùng chung (pipeline, VAD, STT, dịch, TTS, glossary, GUI)
+  platform_impl.py        chọn windows/ hoặc macos/ theo sys.platform
+  audio_types.py          LoopbackDevice / InputDevice / OutputDevice
+  audio_devices.py        mic + thiết bị phát (sounddevice), loopback ủy quyền cho nền tảng
+  capture.py              MicCapture + LoopbackCapture (từ nền tảng)
+  accel.py                Accelerator + chính sách chọn backend theo phần cứng
+  hardware.py             HardwareProfile = phần cứng nền tảng khai báo + accel.choose_plan
+  stt.py                  bộ lọc ảo giác + chọn ngôn ngữ (dùng chung)
+  stt_backends/           faster_whisper.py (CUDA/CPU) | mlx.py (GPU Apple)
+windows/                  audio.py (WASAPI), levels.py, runtime.py (DLL CUDA),
+                          hardware.py (CUDA), CHAY_APP.bat, requirements.txt
+macos/                    audio.py (Core Audio tap), levels.py, runtime.py, hardware.py,
+                          sysaudio-capture/ (Swift), build_helper.sh, setup_mac.sh,
+                          run.command, bench/, requirements.txt
+docs/
 ```
 
-Ý tưởng: định nghĩa một giao diện `AudioSource` (đã có sẵn ngầm trong `LoopbackCapture`
-và `MicCapture`) và một giao diện `SttBackend`. Mỗi nền tảng cung cấp bản riêng, phần
-còn lại không biết mình đang chạy trên hệ nào.
+Giao diện mà mỗi gói nền tảng phải cung cấp:
+
+| Module | Nội dung |
+|---|---|
+| `audio` | `HOST_APIS`, `GENERIC_ALIASES`, `PREFER_DEFAULT_OUTPUT`, `list_loopback_devices`, `get_default_loopback_device`, `is_same_physical_device`, `LoopbackCapture` |
+| `levels` | `find_active_loopback`, `main` |
+| `runtime` | `ensure_cuda_dlls` (macOS trả về True, không làm gì) |
+| `hardware` | `detect_accelerators`, `total_ram_gb` |
+
+Thêm nền tảng mới (hoặc bộ tăng tốc mới như Intel NPU) chỉ cần thêm một gói/backend, không
+sửa lõi.
+
+## 4b. Tăng tốc phần cứng (mục tiêu hiện tại: macOS trước)
+
+Mỗi giai đoạn pipeline chọn bộ tăng tốc riêng (`app/accel.py`), không ép cả app vào một thiết bị.
+
+| Giai đoạn | Windows | macOS (Apple Silicon) |
+|---|---|---|
+| STT | CUDA float16 (faster-whisper), CPU int8 nếu không có GPU | **GPU Apple qua MLX** (float16) |
+| Dịch (NLLB) | CTranslate2 CUDA | CTranslate2 CPU int8 (đo tiếp) |
+| Nhận diện người nói | torch CUDA | torch CPU |
+| TTS (Piper) | CPU | CPU |
+| NPU | Intel NPU: để sau | Neural Engine (Core ML): để sau |
+
+Số đo thật trên M2 Pro 32GB, `macos/bench/bench_engine.py`, câu 4.6-5.1s:
+
+| Model (MLX, GPU) | Suy luận / câu | Nhận diện ngôn ngữ | Ghi chú |
+|---|---|---|---|
+| small | 0.2s | 0.1s | Sai dấu tiếng Việt nhiều ("bộ nhớ đệm" → "bộ nhớ định", "tràn" → "chàn") |
+| medium | 0.5-0.6s | 0.3s | "tràn" → "chán" |
+| **large-v3-turbo** | 0.6s | 0.55s | Đúng "bị tràn"; **mặc định cho Mac từ 16GB RAM** |
+
+Giới hạn còn lại: nhận diện ngôn ngữ (chế độ tự nhận diện) chạy encoder một lần riêng rồi
+transcribe chạy lần nữa, tốn thêm ~0.5s với turbo. Có thể tái dùng đặc trưng encoder.
 
 ## 5. Rủi ro và điều chưa biết (cần spike)
 

@@ -6,6 +6,14 @@
     <string>vn.realtimetrans.sysaudio-capture</string>
     <key>CFBundleName</key>
     <string>sysaudio-capture</string>
+    <key>CFBundleExecutable</key>
+    <string>sysaudio-capture</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSUIElement</key>
+    <true/>
     <key>NSAudioCaptureUsageDescription</key>
     <string>Bat am thanh he thong (cuoc hop/video) de dich theo thoi gian thuc.</string>
 </dict>

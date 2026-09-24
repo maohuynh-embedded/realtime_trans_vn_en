@@ -29,6 +29,30 @@ GENERIC_ALIASES = (
 # Windows can chon output KHAC thiet bi dang loopback de tranh vong lap dich chong dich.
 PREFER_DEFAULT_OUTPUT = False
 
+# Mic ao de dua tieng Anh vao Zoom/Teams (chieu Viet -> Anh)
+VIRTUAL_MIC_HINTS = ("stereo mix", "cable output", "vb-audio", "line in", "what u hear", "wave out")
+VIRTUAL_MIC_SETUP = (
+    "1. Nhan Win+R, go:  mmsys.cpl   roi Enter",
+    "2. Sang tab Recording",
+    "3. Chuot phai vao vung trong > tich 'Show Disabled Devices'",
+    "4. Chuot phai 'Stereo Mix' > Enable",
+    "5. Chay lai lenh nay",
+)
+VIRTUAL_MIC_SETUP_NOTE = (
+    "(Neu may bi khoa khong bat duoc Stereo Mix, dung 1 soi cap 3.5mm noi "
+    "lo tai nghe vao lo mic - xem muc 1 trong README.md)"
+)
+VIRTUAL_MIC_TODO = (
+    "Bat Stereo Mix: Win+R > mmsys.cpl > tab Recording > chuot phai > "
+    "Show Disabled Devices > chuot phai Stereo Mix > Enable"
+)
+VIRTUAL_MIC_TROUBLE = (
+    "Kiem tra Stereo Mix da Enable chua, va am luong cua no > 0.",
+    "Kiem tra thiet bi phat da chon dung chua (Stereo Mix chi bat "
+    "am thanh cua thiet bi phat MAC DINH cua Windows).",
+)
+NO_LOOPBACK_TODO = "Kiem tra thiet bi phat mac dinh trong Windows Sound settings"
+
 _CHUNK_MS = 30
 
 

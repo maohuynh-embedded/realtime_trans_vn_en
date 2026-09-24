@@ -27,6 +27,7 @@ from app.audio_devices import (
     list_output_devices,
 )
 from app.config import default_config
+from app.platform_impl import audio as _platform
 from app.resample import downmix_to_mono, resample_audio, to_int16_bytes
 from app.stt import SpeechToText
 from app.tts import TextToSpeech
@@ -34,7 +35,7 @@ from app.tts import TextToSpeech
 TEST_SENTENCE = "Hello, this is a microphone routing test. If you can read this, the audio path works."
 
 # Ten cac thiet bi thuong duoc dung lam "mic ao"
-VIRTUAL_MIC_HINTS = ("stereo mix", "cable output", "vb-audio", "line in", "what u hear", "wave out")
+VIRTUAL_MIC_HINTS = _platform.VIRTUAL_MIC_HINTS
 
 
 def find_virtual_mics() -> list[InputDevice]:
@@ -52,14 +53,10 @@ def main() -> None:
     virtual_mics = find_virtual_mics()
     if not virtual_mics:
         print("!! CHUA CO MIC AO NAO.\n")
-        print("   Zoom can mot 'mic ao' de nhan tieng Anh tu app. Cach bat (khong can admin):")
-        print("     1. Nhan Win+R, go:  mmsys.cpl   roi Enter")
-        print("     2. Sang tab Recording")
-        print("     3. Chuot phai vao vung trong > tich 'Show Disabled Devices'")
-        print("     4. Chuot phai 'Stereo Mix' > Enable")
-        print("     5. Chay lai lenh nay\n")
-        print("   (Neu may bi khoa khong bat duoc Stereo Mix, dung 1 soi cap 3.5mm noi")
-        print("    lo tai nghe vao lo mic - xem muc 1 trong README.md)")
+        print("   Zoom can mot 'mic ao' de nhan tieng Anh tu app. Cach bat:")
+        for step in _platform.VIRTUAL_MIC_SETUP:
+            print(f"     {step}")
+        print(f"\n   {_platform.VIRTUAL_MIC_SETUP_NOTE}")
         return
 
     in_dev = virtual_mics[0]
@@ -113,9 +110,8 @@ def main() -> None:
 
     if peak < 0.005:
         print("\n==> THAT BAI: mic ao khong nhan duoc tin hieu nao.")
-        print("    - Kiem tra Stereo Mix da Enable chua, va am luong cua no > 0.")
-        print("    - Kiem tra thiet bi phat da chon dung chua (Stereo Mix chi bat")
-        print("      am thanh cua thiet bi phat MAC DINH cua Windows).")
+        for hint in _platform.VIRTUAL_MIC_TROUBLE:
+            print(f"    - {hint}")
         return
 
     print("\nDang chay Whisper tren ban ghi de xem doi tac nghe duoc gi...")

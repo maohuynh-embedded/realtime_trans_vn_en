@@ -27,6 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
+IS_WINDOWS = platform.system() == "Windows"
+IS_MAC = platform.system() == "Darwin"
+# Moi nen tang co file requirements rieng (chung + rieng): windows/ hoac macos/
+PLATFORM_DIR = ROOT / ("windows" if IS_WINDOWS else "macos")
 PIPER_DIR = ROOT / "models" / "piper"
 
 # (duong dan tren Hugging Face, ten tep luu ve)
@@ -95,8 +99,10 @@ def check_python() -> None:
         fail("Can Python 3.10 tro len.")
     if v >= (3, 13):
         print("  ! Canh bao: Python 3.13+ chua duoc thu ky, mot so goi co the thieu wheel.")
-    if platform.system() != "Windows":
-        print("  ! Canh bao: app dung WASAPI loopback nen chi chay day du tren Windows.")
+    if not (IS_WINDOWS or IS_MAC):
+        fail("Chi ho tro Windows va macOS.")
+    if IS_MAC and platform.machine() != "arm64":
+        print("  ! Canh bao: Mac Intel khong co GPU Apple cho MLX - app se chay CPU, cham hon.")
 
 
 def make_venv() -> None:
@@ -112,16 +118,19 @@ def install_requirements() -> None:
     step("Cai cac goi Python")
     py = venv_python()
     run([str(py), "-m", "pip", "install", "--upgrade", "pip", "-q"], "nang cap pip", check=False)
-    req = ROOT / "requirements.txt"
+    req = PLATFORM_DIR / "requirements.txt"
     if not req.exists():
         fail(f"Khong tim thay {req}")
-    run([str(py), "-m", "pip", "install", "-r", str(req)], "cai requirements.txt")
+    run([str(py), "-m", "pip", "install", "-r", str(req)], f"cai {req.relative_to(ROOT)}")
 
 
 def install_gpu(force_cpu: bool) -> bool:
     step("Do phan cung va cai tang toc GPU")
     if force_cpu:
         print("  Da chon --cpu, bo qua phan GPU.")
+        return False
+    if IS_MAC:
+        print("  macOS: dung GPU Apple qua MLX (da cai cung requirements), khong can buoc nay.")
         return False
 
     found, name = has_nvidia_gpu()
@@ -174,6 +183,18 @@ def download_piper() -> None:
     run([str(venv_python()), "-c", code], "tai giong Piper")
 
 
+def build_mac_helper() -> None:
+    """Build helper Swift bat am thanh he thong (chi macOS)."""
+    if not IS_MAC:
+        return
+    step("Build helper bat am thanh he thong (Swift)")
+    script = ROOT / "macos" / "build_helper.sh"
+    if not shutil.which("swift"):
+        print("  ! Thieu Swift. Cai Xcode Command Line Tools: xcode-select --install")
+        return
+    run(["bash", str(script)], "build helper Swift", check=False)
+
+
 def prefetch_models(full: bool) -> None:
     step("Tai truoc cac model con lai")
     if not full:
@@ -218,7 +239,9 @@ def convert_nllb_ct2() -> None:
                         else "bin/ct2-transformers-converter")
     ok = run(
         [str(converter), "--model", "facebook/nllb-200-distilled-600M",
-         "--output_dir", str(out_dir), "--quantization", "int8_float16",
+         "--output_dir", str(out_dir),
+         # macOS chay dich tren CPU (int8); Windows GPU dung int8_float16
+         "--quantization", "int8" if IS_MAC else "int8_float16",
          "--copy_files", "tokenizer.json", "sentencepiece.bpe.model",
          "special_tokens_map.json", "tokenizer_config.json"],
         "chuyen NLLB sang CTranslate2", check=False,
@@ -245,11 +268,17 @@ def final_notes(gpu: bool) -> None:
     print(f"  {py} main.py --test              # tu kiem tra lai bat cu luc nao")
 
     print("\nCon lai can lam bang tay (chi khi can):")
-    print("  - Muon DOI TAC nghe duoc tieng Anh (chieu Viet->Anh):")
-    print("      Win+R > mmsys.cpl > tab Recording > chuot phai > Show Disabled Devices")
-    print("      > chuot phai 'Stereo Mix' > Enable, roi dat mic trong Zoom = Stereo Mix.")
-    print(f"      Kiem tra: {py} main.py --check-route")
-    if not gpu:
+    if IS_MAC:
+        print("  - Lan dau chay: macOS hoi quyen 'Ghi am thanh he thong' cho Terminal -> Cho phep.")
+        print("      (System Settings > Privacy & Security > Screen & System Audio Recording)")
+        print("  - Muon DOI TAC nghe duoc tieng Anh (chieu Viet->Anh): cai mic ao BlackHole,")
+        print("      brew install blackhole-2ch, roi dat mic trong Zoom/Teams = BlackHole 2ch.")
+    else:
+        print("  - Muon DOI TAC nghe duoc tieng Anh (chieu Viet->Anh):")
+        print("      Win+R > mmsys.cpl > tab Recording > chuot phai > Show Disabled Devices")
+        print("      > chuot phai 'Stereo Mix' > Enable, roi dat mic trong Zoom = Stereo Mix.")
+        print(f"      Kiem tra: {py} main.py --check-route")
+    if not gpu and not IS_MAC:
         print("  - May khong co GPU NVIDIA: app chay CPU, se cham hon nhung van dung duoc.")
         print("    Neu co GPU tich hop Intel, xem muc 3.3b trong HUONG_DAN_XAY_DUNG.md.")
 
@@ -264,6 +293,7 @@ def main() -> None:
     make_venv()
     install_requirements()
     gpu = install_gpu(force_cpu="--cpu" in args)
+    build_mac_helper()
     download_piper()
     prefetch_models(full="--full" in args)
     run_selftest(skip="--skip-test" in args)

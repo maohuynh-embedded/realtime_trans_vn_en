@@ -28,6 +28,7 @@ from app.audio_devices import (
     suggest_output_device,
 )
 from app.config import default_config
+from app.platform_impl import audio as _platform
 from app.resample import prepare_for_vad
 from app.vad_segmenter import VadSegmenter
 
@@ -55,7 +56,7 @@ def check_devices(cfg):
         _report(PASS, f"Loopback (bat am thanh cuoc hop): {lb.name}")
     else:
         _report(FAIL, "Khong tim thay loopback device nao")
-        _todo.append("Kiem tra thiet bi phat mac dinh trong Windows Sound settings")
+        _todo.append(_platform.NO_LOOPBACK_TODO)
         return None, None, None, False
 
     mics = list_input_devices()
@@ -85,10 +86,7 @@ def check_devices(cfg):
         _report(PASS, f"Mic ao cho Zoom: {vmics[0].name}")
     else:
         _report(WARN, "Chua co mic ao -> doi tac CHUA nghe duoc tieng Anh")
-        _todo.append(
-            "Bat Stereo Mix: Win+R > mmsys.cpl > tab Recording > chuot phai > "
-            "Show Disabled Devices > chuot phai Stereo Mix > Enable"
-        )
+        _todo.append(_platform.VIRTUAL_MIC_TODO)
 
     return lb, mic, suggested, ok
 

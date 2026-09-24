@@ -37,6 +37,25 @@ GENERIC_ALIASES: tuple = ()
 # Tap da loai tru tien trinh cua app -> khong co vong lap -> dung output mac dinh.
 PREFER_DEFAULT_OUTPUT = True
 
+# Mic ao de dua tieng Anh vao Zoom/Teams (chieu Viet -> Anh). Khong gom
+# 'Microsoft Teams Audio' (thiet bi cua chinh Teams, khong phai duong dan cho app nay).
+VIRTUAL_MIC_HINTS = ("blackhole", "loopback audio", "soundflower", "cable output", "vb-audio")
+VIRTUAL_MIC_SETUP = (
+    "1. Cai mic ao BlackHole:  brew install blackhole-2ch",
+    "2. Trong Zoom/Teams dat Microphone = BlackHole 2ch",
+    "3. Chay lai lenh nay",
+)
+VIRTUAL_MIC_SETUP_NOTE = "(macOS khong co san 'Stereo Mix' nhu Windows nen can BlackHole.)"
+VIRTUAL_MIC_TODO = "Cai mic ao: brew install blackhole-2ch, roi dat mic trong Zoom/Teams = BlackHole 2ch"
+VIRTUAL_MIC_TROUBLE = (
+    "Kiem tra BlackHole da cai (brew install blackhole-2ch) va da chon lam mic trong Zoom/Teams.",
+    "Kiem tra thiet bi phat la BlackHole 2ch (app phat tieng Anh vao dung thiet bi do).",
+)
+NO_LOOPBACK_TODO = (
+    "Cap quyen 'Ghi am thanh he thong' cho Terminal: System Settings > Privacy & Security > "
+    "Screen & System Audio Recording"
+)
+
 _CHUNK_MS = 30
 _SILENCE_WARN_S = 8.0
 

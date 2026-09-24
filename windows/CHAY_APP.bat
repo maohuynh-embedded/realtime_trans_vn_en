@@ -8,7 +8,7 @@ rem  Nhap dup vao file nay la chay duoc.
 rem  Lan dau se tu cai dat (mat vai phut), cac lan sau mo thang GUI.
 rem ============================================================
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "VENV_PY=.venv\Scripts\python.exe"
 
