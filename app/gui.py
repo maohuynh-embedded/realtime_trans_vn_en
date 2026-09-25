@@ -29,6 +29,7 @@ from app.audio_devices import (
 from app.config import LISTEN_DIRECTIONS, default_config
 from app.models import ModelHub
 from app.pipeline import DirectionPipeline
+from app.platform_impl import audio as _platform_audio
 
 POLL_MS = 150
 
@@ -121,6 +122,15 @@ class DirectionPanel(ttk.LabelFrame):
             variable=self.tech_var, value=True, command=self._on_tech_toggle,
         ).pack(side=tk.LEFT, padx=(10, 0))
 
+        # Doc ban dich bang GIONG CUA NGUOI NOI (sao chep giong). Chi co khi may du manh
+        # (Apple Silicon >= 16GB) va chi co tac dung khi dich SANG TIENG ANH.
+        self.clone_var = tk.BooleanVar(value=False)
+        if getattr(app, "hw", None) is not None and app.hw.can_clone_voice:
+            ttk.Checkbutton(
+                mode_row, text="Giu giong nguoi noi (dich sang tieng Anh)",
+                variable=self.clone_var, command=self._on_clone_toggle,
+            ).pack(side=tk.LEFT, padx=(20, 0))
+
         ctrl = ttk.Frame(self)
         ctrl.pack(fill=tk.X, pady=(4, 2))
         self.toggle_btn = ttk.Button(ctrl, text="Bat", width=10, command=self._on_toggle)
@@ -138,6 +148,14 @@ class DirectionPanel(ttk.LabelFrame):
         ttk.Checkbutton(
             ctrl, text="Doc thanh tieng", variable=self.speak_var, command=self._on_speak_toggle
         ).pack(side=tk.LEFT, padx=6)
+
+        # Tat tieng goc cua video/cuoc hop, chi nghe ban dich (macOS). Ap dung khi bam Bat.
+        self.mute_var = tk.BooleanVar(value=False)
+        if source_kind == "loopback" and _platform_audio.SUPPORTS_MUTE_ORIGINAL:
+            ttk.Checkbutton(
+                ctrl, text="Tat tieng goc (chi nghe ban dich)", variable=self.mute_var,
+                command=self._on_mute_toggle,
+            ).pack(side=tk.LEFT, padx=6)
 
         self.lag_var = tk.StringVar(value="")
         ttk.Label(ctrl, textvariable=self.lag_var, foreground="#888").pack(side=tk.LEFT, padx=10)
@@ -289,6 +307,9 @@ class DirectionPanel(ttk.LabelFrame):
             self.direction, self.app.cfg.audio, self.app.hub, source, output,
             result_queue=self.app.result_queue, status_queue=self.app.status_queue,
         )
+        self.pipeline.mute_original = self.mute_var.get()
+        # Chi co nghia khi DICH SANG TIENG ANH (Chatterbox doc tieng Anh)
+        self.pipeline.clone_voice = self.clone_var.get() and self.direction.tgt_language == "en"
         if self.tech_var.get():   # giu dung che do da chon TRUOC khi bam Bat
             self.pipeline.tech_mode.set()
         self.app.apply_latency_settings(self.pipeline)
@@ -312,6 +333,9 @@ class DirectionPanel(ttk.LabelFrame):
         if self.pipeline is not None and self.pipeline.is_running():
             self.toggle_btn.config(text="Tat")
             self.pause_btn.config(state="normal")
+            # Thong bao nap/lam nong model khong co tien to chieu nen nam o dong chung
+            # va khong ai xoa: cap nhat khi da chay that.
+            self.app.global_status.set("Dang chay.")
 
     def _on_auto_dev_toggle(self) -> None:
         """Tu dong = app tu chon thiet bi. Bo tich = nguoi dung tu chon."""
@@ -383,8 +407,28 @@ class DirectionPanel(ttk.LabelFrame):
         else:
             self.status_var.set(f"Se nghe tieng {'Anh' if new_dir.stt_language == 'en' else 'Viet'}.")
 
+    def _on_clone_toggle(self) -> None:
+        """Sao chep giong chi co nghia khi doc thanh tieng -> tu bat doc."""
+        if self.clone_var.get() and not self.speak_var.get():
+            self.speak_var.set(True)
+            self._on_speak_toggle()
+        if self.pipeline is not None and self.pipeline.is_running():
+            self.status_var.set("Doi tuy chon giong: TAT roi BAT lai de ap dung (lan dau tai model ~2.7GB).")
+        elif self.clone_var.get():
+            self.status_var.set("Se doc bang giong nguoi noi khi dich sang tieng Anh (lan dau tai model ~2.7GB).")
+
+    def _on_mute_toggle(self) -> None:
+        """Tat tieng goc ma khong doc ban dich thi khong nghe thay gi -> tu bat doc."""
+        if self.mute_var.get() and not self.speak_var.get():
+            self.speak_var.set(True)
+            self._on_speak_toggle()
+        if self.pipeline is not None and self.pipeline.is_running():
+            self.status_var.set("Doi tuy chon tieng goc: TAT roi BAT lai de ap dung.")
+
     def _on_speak_toggle(self) -> None:
         self.direction.speak = self.speak_var.get()
+        if self.mute_var.get() and not self.speak_var.get():
+            self.status_var.set("Luu y: dang tat tieng goc ma khong doc ban dich -> se khong nghe gi.")
         if self.pipeline is not None:
             if self.speak_var.get():
                 self.pipeline.speak.set()

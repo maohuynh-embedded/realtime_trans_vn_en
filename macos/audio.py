@@ -37,6 +37,9 @@ GENERIC_ALIASES: tuple = ()
 # Tap da loai tru tien trinh cua app -> khong co vong lap -> dung output mac dinh.
 PREFER_DEFAULT_OUTPUT = True
 
+# Co tat duoc tieng goc trong luc dich (chi nghe ban dich) khong.
+SUPPORTS_MUTE_ORIGINAL = True
+
 # Mic ao de dua tieng Anh vao Zoom/Teams (chieu Viet -> Anh). Khong gom
 # 'Microsoft Teams Audio' (thiet bi cua chinh Teams, khong phai duong dan cho app nay).
 VIRTUAL_MIC_HINTS = ("blackhole", "loopback audio", "soundflower", "cable output", "vb-audio")
@@ -99,8 +102,10 @@ class LoopbackCapture:
     """Chay helper Swift va day audio he thong (float32 numpy) vao queue."""
 
     def __init__(self, device: LoopbackDevice | None = None,
-                 out_queue: "queue.Queue | None" = None, status_cb=None):
+                 out_queue: "queue.Queue | None" = None, status_cb=None,
+                 mute_original: bool = False):
         self.device = device or _TAP_DEVICE
+        self.mute_original = mute_original
         self.out_queue: queue.Queue = out_queue if out_queue is not None else queue.Queue()
         self._status_cb = status_cb or (lambda _msg: None)
         self._rate = self.device.sample_rate
@@ -151,8 +156,11 @@ class LoopbackCapture:
     def start(self) -> None:
         binary = helper_path()
         self._open_anchor()
+        cmd = [str(binary), "--exclude-pid", str(os.getpid())]
+        if self.mute_original:
+            cmd.append("--mute-original")
         self._proc = subprocess.Popen(
-            [str(binary), "--exclude-pid", str(os.getpid())],
+            cmd,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         info = self._read_info()

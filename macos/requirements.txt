@@ -4,3 +4,4 @@
 
 mlx-whisper        # Whisper chay tren GPU Apple (Metal) - nhanh hon CPU ~5x
 # ffmpeg (brew install ffmpeg) can cho mlx-whisper doc file audio; app khong can khi dua mang numpy vao.
+mlx-audio          # doc thanh tieng bang giong nguoi noi (Chatterbox, sao chep giong) cho chieu Viet->Anh

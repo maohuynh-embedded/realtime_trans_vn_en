@@ -29,6 +29,9 @@ GENERIC_ALIASES = (
 # Windows can chon output KHAC thiet bi dang loopback de tranh vong lap dich chong dich.
 PREFER_DEFAULT_OUTPUT = False
 
+# WASAPI loopback khong tat duoc tieng goc cua ung dung khac.
+SUPPORTS_MUTE_ORIGINAL = False
+
 # Mic ao de dua tieng Anh vao Zoom/Teams (chieu Viet -> Anh)
 VIRTUAL_MIC_HINTS = ("stereo mix", "cable output", "vb-audio", "line in", "what u hear", "wave out")
 VIRTUAL_MIC_SETUP = (
@@ -105,7 +108,8 @@ class LoopbackCapture:
     """
 
     def __init__(self, device: LoopbackDevice | None = None,
-                 out_queue: "queue.Queue | None" = None, status_cb=None):
+                 out_queue: "queue.Queue | None" = None, status_cb=None,
+                 mute_original: bool = False):   # bo qua: Windows khong ho tro
         self.device = device or get_default_loopback_device()
         self.out_queue: queue.Queue = out_queue if out_queue is not None else queue.Queue()
         self._pa: pyaudio.PyAudio | None = None

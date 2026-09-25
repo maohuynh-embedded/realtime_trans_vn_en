@@ -21,10 +21,11 @@ class SpeechToText:
         from dataclasses import replace
         self.cfg = replace(cfg, device=self.backend.device, compute_type=self.backend.compute_type)
         # Bien dich kernel / nap bo nho ngay bay gio, khong doi toi cau that dau tien.
+        self.warmup_error: str | None = None
         try:
             self.backend.warmup()
-        except Exception:
-            pass
+        except Exception as exc:   # khong chet app, nhung PHAI de lai dau vet de chan doan
+            self.warmup_error = f"{type(exc).__name__}: {exc}"
 
     def transcribe_pcm16(
         self,

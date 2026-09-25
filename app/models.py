@@ -19,6 +19,7 @@ class ModelHub:
         self.stt: SpeechToText | None = None
         self._translators: dict[str, Translator] = {}
         self._tts: dict[str, TextToSpeech] = {}
+        self._clone_tts = None   # TTS sao chep giong (Chatterbox), nap khi can
 
     def _status(self, msg: str) -> None:
         self._status_cb(msg)
@@ -58,6 +59,14 @@ class ModelHub:
                 direction.tts_onnx, direction.tts_json, direction.tts_length_scale
             )
         return self._tts[tts_key]
+
+    def ensure_clone_tts(self):
+        """TTS doc bang giong cua nguoi noi (macOS/MLX). Lan dau tai them ~2.7GB, mat vai phut."""
+        if self._clone_tts is None:
+            self._status("Dang tai giong sao chep (Chatterbox) - lan dau co the mat vai phut...")
+            from app.tts_clone import VoiceCloneTTS
+            self._clone_tts = VoiceCloneTTS()
+        return self._clone_tts
 
     def ensure_direction(self, direction: DirectionConfig) -> tuple[Translator, TextToSpeech]:
         """Load model MT + TTS cho 1 chieu, roi tra ve ca hai.

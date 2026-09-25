@@ -74,9 +74,13 @@ class MlxBackend:
     def detect_language(self, audio_f32: np.ndarray) -> dict[str, float]:
         return self._pool.submit(self._detect, audio_f32).result()
 
-    def warmup(self) -> None:
-        # Lan goi dau cua MLX bien dich kernel Metal (~2.5s); lam truoc de cau that
-        # dau tien khong bi tre. Am thanh la nhieu nhe de di het duong giai ma.
+    def _warm(self) -> None:
         noise = (np.random.default_rng(0).standard_normal(16000) * 0.01).astype(np.float32)
         self._transcribe(noise, "en", None)
         self._detect(noise)
+
+    def warmup(self) -> None:
+        # Lan goi dau cua MLX bien dich kernel Metal (~2.5s); lam truoc de cau that
+        # dau tien khong bi tre. PHAI chay trong luong cua backend (xem docstring dau
+        # file): goi truc tiep tu luong khac se bao 'no Stream(gpu) in current thread'.
+        self._pool.submit(self._warm).result()

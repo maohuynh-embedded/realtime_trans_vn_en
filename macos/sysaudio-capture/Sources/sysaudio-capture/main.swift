@@ -6,6 +6,12 @@
 //
 // --exclude-pid: loai tru am thanh cua tien trinh do (dung cho chinh Python de ban
 //                dich phat ra khong bi bat lai -> khong co vong lap).
+// --mute-original: tat tieng goc cua cac tien trinh bi bat (chi tap nghe duoc). Tien trinh bi
+//                loai tru (--exclude-pid) van phat binh thuong, nen ban dich do chinh app phat
+//                ra van nghe duoc. Dung .muted (vo dieu kien, theo CATapDescription.h): che do
+//                .mutedWhenTapped chi tat tieng "khi tap dang duoc client KHAC doc" nen tren
+//                may that van nghe thay tieng goc. Tieng goc TU KHOI PHUC khi helper thoat
+//                (tap rieng tu bi huy cung tien trinh), khong ket im lang.
 // --seconds    : tu dung sau S giay (de test); mac dinh chay den khi bi SIGINT/SIGTERM.
 
 import CoreAudio
@@ -24,6 +30,7 @@ func check(_ status: OSStatus, _ what: String) {
 // ---- arguments ----
 var excludePIDs: [pid_t] = []
 var seconds: Double? = nil
+var muteOriginal = false
 var args = Array(CommandLine.arguments.dropFirst())
 while !args.isEmpty {
     let a = args.removeFirst()
@@ -31,6 +38,8 @@ while !args.isEmpty {
     case "--exclude-pid":
         guard let v = args.first, let p = pid_t(v) else { fail("--exclude-pid needs a number") }
         args.removeFirst(); excludePIDs.append(p)
+    case "--mute-original":
+        muteOriginal = true
     case "--seconds":
         guard let v = args.first, let s = Double(v) else { fail("--seconds needs a number") }
         args.removeFirst(); seconds = s
@@ -77,7 +86,7 @@ let excludedObjects = excludePIDs.compactMap { processObject(for: $0) }
 let tapDesc = CATapDescription(stereoGlobalTapButExcludeProcesses: excludedObjects)
 tapDesc.name = "sysaudio-capture tap"
 tapDesc.isPrivate = true
-tapDesc.muteBehavior = .unmuted
+tapDesc.muteBehavior = muteOriginal ? .muted : .unmuted
 
 var tapID = AudioObjectID(kAudioObjectUnknown)
 check(AudioHardwareCreateProcessTap(tapDesc, &tapID), "AudioHardwareCreateProcessTap")

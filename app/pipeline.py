@@ -19,14 +19,17 @@ import threading
 import time
 from dataclasses import dataclass
 
+import numpy as np
+
 from app.audio_devices import InputDevice, LoopbackDevice, OutputDevice
 from app.capture import LoopbackCapture, MicCapture
 from app.config import AudioConfig, DirectionConfig
 from app.models import ModelHub
 from app.playback import Player
-from app.resample import prepare_for_vad
+from app.resample import prepare_for_vad, resample_audio
 from app.speaker import SpeakerTracker
 from app.vad_segmenter import VadSegmenter
+from app.voice_bank import VoiceBank
 
 
 @dataclass
@@ -43,6 +46,7 @@ class _Recognized:
     captured_at: float
     t_stt: float
     dropped: int = 0   # so utterance bi bo qua TRUOC KHI toi duoc STT
+    speaker_key: str = ""   # khoa nguoi noi cho kho mau giong ("" neu khong biet)
 
 
 _SENTENCE_END = (".", "!", "?", "...", "。", "！", "？", "…")
@@ -75,6 +79,7 @@ class _PendingBuffer:
     dropped: int            # cong don ca cac manh
     started_at: float       # gio (monotonic) mo buffer - cho kiem tra timeout
     n_parts: int = 1
+    speaker_key: str = ""
 
     def append(self, rec: "_Recognized", extra_dropped: int = 0) -> None:
         self.text = f"{self.text} {rec.source_text}".strip()
@@ -164,6 +169,17 @@ class DirectionPipeline:
         # phat thi ta khong thu, nen khong bi dich chong dich.
         self._playing = threading.Event()
 
+        # Tat tieng goc cua nguon loopback (chi nghe ban dich). Doc luc start();
+        # chi co tac dung tren nen tang ho tro (macOS).
+        self.mute_original: bool = False
+
+        # Doc ban dich bang GIONG CUA NGUOI NOI (sao chep giong; chi khi dich sang tieng Anh).
+        # Tut lai qua clone_max_lag_s thi lui ve giong Piper de duoi kip.
+        self.clone_voice: bool = False
+        self.clone_max_lag_s: float = 5.0
+        self.voice_bank = VoiceBank()
+        self._clone = None
+
         # Chong do tre don: neu tut lai qua max_lag_s thi bo cac cau cu.
         self.drop_when_behind: bool = True
         self.max_lag_s: float = 6.0
@@ -192,6 +208,7 @@ class DirectionPipeline:
         if self.direction.speak:
             self.hub.ensure_tts(self.direction)
         self.hub.warm_up(self.direction)
+        self._load_clone_tts()
         self._player = Player(self.output_device, status_cb=self._set_status)
 
     def start(self) -> None:
@@ -199,9 +216,11 @@ class DirectionPipeline:
             self.load_models()
 
         self._stop_event.clear()
+        self.voice_bank.reset()
         if self.direction.source == "loopback":
             self._capture = LoopbackCapture(device=self.source_device, out_queue=self._raw_queue,
-                                            status_cb=self._set_status)
+                                            status_cb=self._set_status,
+                                            mute_original=self.mute_original)
         else:
             self._capture = MicCapture(device=self.source_device, out_queue=self._raw_queue)
         self._capture.start()
@@ -322,12 +341,15 @@ class DirectionPipeline:
     def _run_stt(self, utt, stt, dropped: int) -> None:
         # Nhan dien nguoi noi TRUOC khi STT (chay tren audio goc, rat nhanh)
         speaker_label = ""
+        # Nguon mic luon la chinh ban; nguon loopback thi lay theo nhan dien nguoi noi
+        speaker_key = "" if self.identify_speakers else "me"
         if self.identify_speakers:
             try:
                 info = self._speaker_tracker.identify(
                     utt.pcm16_bytes, self.audio_cfg.target_sample_rate
                 )
                 speaker_label = info.label
+                speaker_key = f"spk{info.speaker_id}"
             except Exception:
                 pass   # khong nhan dien duoc thi van tiep tuc binh thuong
 
@@ -362,6 +384,10 @@ class DirectionPipeline:
             self._set_status(f"Bo qua ({self.rejected_count}): {reason}")
             return
 
+        # Cau da co loi noi that (qua bo loc ao giac) -> them vao kho mau giong cua nguoi do
+        if self.clone_voice and speaker_key:
+            self.voice_bank.add(speaker_key, utt.pcm16_bytes)
+
         self._recognized_queue.put(
             _Recognized(
                 source_text=source_text,
@@ -371,6 +397,7 @@ class DirectionPipeline:
                 captured_at=utt.captured_at,
                 t_stt=t_stt,
                 dropped=dropped,
+                speaker_key=speaker_key,
             )
         )
 
@@ -399,7 +426,12 @@ class DirectionPipeline:
 
             # Neu doi ngon ngu nguon giua chung (che do tu nhan dien) thi khong
             # gop chung voi buffer dang do - xuat het phan cu roi bat dau moi.
-            if pending is not None and pending.detected_lang != rec.detected_lang:
+            # Doi ngon ngu nguon HOAC (khi sao chep giong) doi nguoi noi thi khong gop chung:
+            # moi cau phai doc bang dung giong cua nguoi noi no.
+            if pending is not None and (
+                pending.detected_lang != rec.detected_lang
+                or (self.clone_voice and pending.speaker_key != rec.speaker_key)
+            ):
                 self._flush_pending(pending, translator)
                 pending = None
 
@@ -413,6 +445,7 @@ class DirectionPipeline:
                     t_stt=rec.t_stt,
                     dropped=total_dropped,
                     started_at=time.monotonic(),
+                    speaker_key=rec.speaker_key,
                 )
             else:
                 pending.append(rec, extra_dropped)
@@ -441,8 +474,44 @@ class DirectionPipeline:
             captured_at=pending.captured_at,
             t_stt=pending.t_stt,
             dropped=pending.dropped,
+            speaker_key=pending.speaker_key,
         )
         self._translate_and_speak(rec, translator, pending.dropped)
+
+    def _load_clone_tts(self) -> None:
+        """Nap TTS sao chep giong neu duoc bat (chi khi dich sang tieng Anh)."""
+        if not (self.clone_voice and self.direction.tgt_language == "en"):
+            self._clone = None
+            return
+        try:
+            self._clone = self.hub.ensure_clone_tts()
+            # Lam nong bang mot cau Piper: giong nguoi that hon tieng on / im lang
+            pcm, sr = self.hub.ensure_tts(self.direction).synthesize(
+                "This is a short sentence to warm up the voice model."
+            )
+            self._clone.warmup(resample_audio(pcm.astype(np.float32) / 32768.0, sr, 16000))
+        except Exception as exc:   # thieu mlx-audio, khong du bo nho, ...
+            self._clone = None
+            self._set_status(
+                f"Khong bat duoc sao chep giong ({type(exc).__name__}: {str(exc)[:60]}) "
+                "- dung giong mac dinh."
+            )
+
+    def _synthesize(self, text: str, rec: _Recognized):
+        """Doc `text`: bang giong nguoi noi neu co the, khong thi bang giong Piper mac dinh."""
+        if self._clone is not None and self.clone_voice and rec.speaker_key:
+            sample = self.voice_bank.get(rec.speaker_key)
+            lag = time.monotonic() - rec.captured_at
+            if sample is None:
+                self._set_status("Chua du mau giong nguoi noi -> dung giong mac dinh.")
+            elif lag > self.clone_max_lag_s:
+                self._set_status(f"Tre {lag:.1f}s -> dung giong mac dinh de duoi kip.")
+            else:
+                try:
+                    return self._clone.synthesize(text, sample.audio, rec.speaker_key, sample.version)
+                except Exception as exc:
+                    self._set_status(f"Sao chep giong loi ({type(exc).__name__}) -> dung giong mac dinh.")
+        return self.hub.ensure_tts(self.direction).synthesize(text)
 
     def _translate_and_speak(self, rec: _Recognized, translator, dropped: int) -> None:
         t0 = time.monotonic()
@@ -467,8 +536,7 @@ class DirectionPipeline:
             # chut (vai giay) nhung chi xay ra dung mot lan.
             self._set_status("Dang doc ban dich...")
             t0 = time.monotonic()
-            tts = self.hub.ensure_tts(self.direction)
-            pcm, sr = tts.synthesize(translated)
+            pcm, sr = self._synthesize(translated, rec)
             t_tts = time.monotonic() - t0
             if not self._paused.is_set():
                 self._playing.set()

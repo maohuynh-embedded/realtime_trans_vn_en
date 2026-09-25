@@ -92,5 +92,7 @@ def choose_plan(accels: list[Accelerator], ram_gb: float, cpu_threads: int) -> E
         stt_model_size=size,
         mt_device="cuda" if cuda else "cpu",
         speaker_device="cuda:0" if cuda else "cpu",
-        can_clone_voice=bool(cuda and cuda.memory_gb >= 5),   # XTTS can ~4GB VRAM
+        # Sao chep giong hien chi co backend Chatterbox/MLX (app/tts_clone.py) -> chi Apple Silicon
+        # co du bo nho. CUDA: chua co backend nen chua bao la co the.
+        can_clone_voice=bool(apple and ram_gb >= 16),
     )

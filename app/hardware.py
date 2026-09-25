@@ -89,4 +89,4 @@ if __name__ == "__main__":
     for a in hw.accelerators:
         state = "san sang" if a.usable else f"chua dung ({a.note})"
         print(f"  - {a.kind}: {a.name} {a.memory_gb:.0f}GB [{state}]")
-    print(f"  Clone giong duoc: {'CO' if hw.can_clone_voice else 'KHONG (can GPU >= 5GB VRAM)'}")
+    print(f"  Clone giong duoc: {'CO' if hw.can_clone_voice else 'KHONG (chi Apple Silicon >= 16GB RAM)'}")
