@@ -35,3 +35,6 @@ desktop.ini
 dist/
 .DS_Store
 .build/
+
+# Mau am thanh de do (khong commit: ban quyen)
+evals/samples/

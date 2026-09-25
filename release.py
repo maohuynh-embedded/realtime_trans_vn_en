@@ -6,7 +6,7 @@ bao gio vo tinh dong goi .venv/ hay models/ (vai chuc GB) hay file rac con sot
 lai tu luc dev/test - dung chinh xac nhung gi da commit, khong hon khong kem.
 
 Dung khi ban muon dong goi mot ban "san sang dua cho nguoi dung khac": nguoi
-nhan chi can giai nen roi nhap dup CHAY_APP.bat, khong can cai Git hay tu tay
+nhan chi can giai nen roi nhap dup windows/CHAY_APP.bat, khong can cai Git hay tu tay
 lay ma nguon.
 
   python release.py                 tu tang so phien ban (v1.0.0 -> v1.0.1),
@@ -18,7 +18,7 @@ lay ma nguon.
   python release.py --push          sau khi tag xong, day tag do len GitHub
 
 Ban phat hanh la ban CHUA KEM MODEL (models/ nang vai GB, khong hop de dong
-goi cung ma nguon). Nguoi dung giai nen xong, CHAY_APP.bat se tu tai model o
+goi cung ma nguon). Nguoi dung giai nen xong, windows/CHAY_APP.bat se tu tai model o
 lan chay dau tien (can mang). Muon dong goi CA model de chay offline hoan
 toan, xem huong dan trong README.md muc "Dong goi offline".
 """
@@ -150,7 +150,7 @@ def main() -> None:
 
     size_mb = zip_path.stat().st_size / 1024 / 1024
     print(f"\n{'=' * 68}\n  XONG: {zip_path}  ({size_mb:.2f} MB)\n{'=' * 68}")
-    print(f"\n  Dua file nay cho nguoi dung: ho giai nen roi nhap dup CHAY_APP.bat.")
+    print(f"\n  Dua file nay cho nguoi dung: ho giai nen roi nhap dup windows/CHAY_APP.bat.")
     print(f"  Lan dau chay se tu cai dat (can mang de tai thu vien + model).")
 
     if not no_tag and not push:

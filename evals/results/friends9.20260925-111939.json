@@ -1,0 +1,40 @@
+{
+  "file": "friends9.wav",
+  "audio_s": 967.80775,
+  "stt": "mlx/large-v3-turbo",
+  "end_ring_ms": 700,
+  "utterances": 164,
+  "kept": 153,
+  "rejected": 11,
+  "lang_en": 48,
+  "lang_vi": 105,
+  "utt_len_s": {
+    "median": 7.71,
+    "p95": 7.98,
+    "max": 7.98
+  },
+  "vad_wait_s": {
+    "median": 0.09,
+    "p95": 0.42
+  },
+  "stt_s": {
+    "median": 1.1974606664998646,
+    "p95": 1.2945496669999557,
+    "rtf": 0.20553190907773258
+  },
+  "mt_s": {
+    "median": 0.32660322950050613,
+    "p95": 0.8584964579986263
+  },
+  "ends_with_terminal_punct": 0.5816993464052288,
+  "e2e_latency_s_no_buffer": {
+    "median": 1.3653855829995152,
+    "p95": 2.049350457999026,
+    "max": 2.4208542500006303
+  },
+  "e2e_latency_s_with_buffer_like_app": {
+    "median": 1.7277147079990982,
+    "p95": 9.657275750000167,
+    "max": 16.481048042000566
+  }
+}
